@@ -1,9 +1,21 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mi seguimiento · KSVT</title>
+<title>Koru KSVT</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='28' fill='%23c94328'/><text x='50' y='68' font-size='52' font-family='Helvetica,Arial,sans-serif' font-weight='700' text-anchor='middle' fill='white'>K</text></svg>">
+<style>
+/* Contenedor de Koru KSVT. Cada espacio vive en su propio compartimento (iframe):
+   su CSS, su código y su archivo de datos no se mezclan con los de los demás. */
+html,body{height:100%;margin:0;background:#232323;overflow:hidden;}
+iframe{position:fixed;inset:0;width:100%;height:100%;border:0;display:none;background:#232323;}
+iframe.on{display:block;}
+</style>
+</head>
+<body>
+<!-- ===== Espacio Tareas (antes koru-project-tracker). Datos: seguimiento.json ===== -->
+<template id="app-tareas">
 <style>
 /* ===== KSVT 1.1 · Primitivas (paleta intacta) ===== */
 :root{
@@ -416,6 +428,18 @@ body.is-dragging,body.is-dragging *{cursor:grabbing !important;user-select:none;
 .add-line input:focus,.add-line input:focus-visible{outline:none;box-shadow:none;}
 .add-line .b{height:30px;padding:0 var(--space-3);}
 
+/* KSVT Escritorio: selector de espacios y enlace a la pieza del planner */
+.ksvt-spaces{display:flex;margin:var(--space-3) var(--space-4) 0;}
+.ksvt-spaces button{flex:1;padding:0 6px;font-weight:var(--font-weight-strong);}
+.tag-ref{
+  flex:none;display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 10px;margin-top:5px;
+  border:1px solid var(--border-soft);border-radius:var(--radius-pill);background:var(--surface-soft);color:var(--text-secondary);
+  font-size:var(--font-size-support);font-weight:var(--font-weight-strong);cursor:pointer;white-space:nowrap;
+  transition:background var(--duration-fast),color var(--duration-fast);
+}
+button.tag-ref:hover{background:var(--surface-soft-hover);color:var(--text-primary);}
+.tag-ref.sm{height:20px;padding:0 8px;margin-top:0;cursor:default;}
+
 /* Urgente: el único relleno sólido dentro de una lista, para que se lea primero */
 .tag-urgent{
   flex:none;display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 10px;margin-top:5px;
@@ -538,6 +562,7 @@ button.tag-urgent:hover{background:var(--accent-hover);}
 .form-card{display:flex;flex-direction:column;gap:var(--space-4);margin-top:var(--space-6);padding:var(--space-6);
   background:var(--surface-card);border:1px solid var(--border-soft);border-radius:var(--radius-xl);box-shadow:var(--shadow-card);}
 .flabel{display:flex;flex-direction:column;gap:var(--space-2);font-size:var(--font-size-label);color:var(--text-secondary);}
+.flabel .field{flex:none;}
 .flabel .help{margin:0;}
 .note a,.help a{color:var(--text-accent);}
 .file-kind{font-size:var(--font-size-support);color:var(--text-tertiary);margin-bottom:2px;}
@@ -583,13 +608,12 @@ dialog.dlg::backdrop{background:var(--surface-overlay);backdrop-filter:blur(2px)
   *{transition:none !important;animation:none !important;}
 }
 </style>
-</head>
-<body>
 <div class="shell">
 
   <!-- ENTRADA -->
   <aside class="col col-left" aria-label="Clientes y proyectos">
-    <div class="brand"><span class="brand-mark" aria-hidden="true">K</span><span class="brand-text"><span class="brand-name">Mi seguimiento</span><span class="brand-date" id="today"></span></span><span class="brand-sys">KSVT</span></div>
+    <div class="brand"><span class="brand-mark" aria-hidden="true">K</span><span class="brand-text"><span class="brand-name">Koru</span><span class="brand-date" id="today"></span></span><span class="brand-sys">KSVT</span></div>
+    <div class="seg ksvt-spaces" id="ksvtSpaces" role="tablist" aria-label="Espacio" hidden></div>
     <div class="section">
       <button class="b go wide tall" id="newClientBtn"><span class="plus" aria-hidden="true">+</span>Nuevo cliente</button>
       <div class="new-client-card" id="newClientForm" hidden>
@@ -806,7 +830,7 @@ function heroRemaining(s){
 }
 
 /* ---------- Render ---------- */
-function render(){ ensureSelection(); renderTree(); renderCenter(); renderSide(); renderNewClient(); }
+function render(){ ensureSelection(); renderTree(); renderCenter(); renderSide(); renderNewClient(); notifyHub(); }
 
 function changed(opts){
   rev++;
@@ -815,6 +839,7 @@ function changed(opts){
   renderTree();
   renderSide();
   scheduleSave();
+  notifyHub();
 }
 
 function renderNewClient(){
@@ -922,6 +947,7 @@ function clientView(c){
     const tasks = p.tasks.map(t => `<li class="mtask ${t.done ? 'done' : ''}" data-pid="${p.id}" data-tid="${t.id}">
         <button class="circle" role="checkbox" aria-checked="${t.done}" data-act="toggle" title="${t.done ? 'Marcar como pendiente' : 'Marcar como hecha'}"></button>
         <span class="mtext">${esc(t.text)}</span>
+        ${t.ref ? '<span class="tag-ref sm">↗ Pieza</span>' : ''}
         ${t.urgent && !t.done ? '<span class="tag-urgent sm">Urgente</span>' : ''}</li>`).join('');
     return `<div class="pcard ${open ? 'open' : ''}" data-card="${p.id}">
       <div class="pcard-head">
@@ -1034,6 +1060,7 @@ function taskRow(t, i, n){
     <span class="handle" title="Arrastra para reordenar" aria-hidden="true">⋮⋮</span>
     <button class="circle" role="checkbox" aria-checked="${t.done}" data-act="toggle" title="${t.done ? 'Marcar como pendiente' : 'Marcar como hecha'}"></button>
     <textarea class="task-text" rows="1" aria-label="Tarea" spellcheck="false">${esc(t.text)}</textarea>
+    ${t.ref ? `<button class="tag-ref" data-act="ref" title="Abrir «${esc(t.ref.title || 'la pieza')}» en el planner">↗ Pieza</button>` : ''}
     ${urgentNow ? '<button class="tag-urgent" data-act="urgent" title="Quitar urgente">Urgente</button>' : ''}
     <span class="task-actions">
       <button class="ib ${t.urgent ? 'on' : ''}" data-act="urgent" title="${t.urgent ? 'Quitar urgente' : 'Marcar como urgente'}">!</button>
@@ -1707,7 +1734,8 @@ function normalize(raw){
           done: !!t.done,
           urgent: !!t.urgent,
           createdAt: t.createdAt || now(),
-          doneAt: t.doneAt || null
+          doneAt: t.doneAt || null,
+          ref: t.ref && t.ref.id ? {space:String(t.ref.space || 'planner'), id:String(t.ref.id), title:String(t.ref.title || '')} : undefined
         }))
       }))
     }))
@@ -1920,6 +1948,13 @@ center.addEventListener('click', e => {
       break;
     }
     case 'urgent': toggleUrgent(id); break;
+    case 'ref': {
+      const {p} = current();
+      const t = p && p.tasks.find(x => x.id === id);
+      const h = koruHub();
+      if (t && t.ref && h) h.openPiece(t.ref.id);
+      break;
+    }
     case 'client-up': if (c){ moveClient(c.id, -1); focusSel('[data-act="client-up"]:not(:disabled)') || focusSel('[data-act="client-down"]'); } break;
     case 'client-down': if (c){ moveClient(c.id, 1); focusSel('[data-act="client-down"]:not(:disabled)') || focusSel('[data-act="client-up"]'); } break;
     case 'gh-open': openConnect(); break;
@@ -2109,8 +2144,2502 @@ window.addEventListener('pagehide', () => {
     .catch(() => { /* La página se está cerrando: no queda dónde avisar. */ });
 });
 
+/* ---------- KSVT Escritorio: puente con el planner ----------
+   El tracker sigue siendo dueño de sus datos y de su guardado. Esto solo deja
+   que el planner lea clientes y proyectos y cree tareas enlazadas a una pieza. */
+function koruHub(){
+  try { return window.parent !== window && window.parent.KoruHub ? window.parent.KoruHub : null; }
+  catch (err){ return null; }
+}
+function notifyHub(){ const h = koruHub(); if (h) h.trackerChanged(); }
+window.KoruTracker = {
+  ready: () => !!data && ui.remote !== 'loading',
+  clients: () => (data ? data.clients : []).map(c => ({id:c.id, name:c.name, emoji:c.emoji, projects:c.projects.map(p => ({id:p.id, name:p.name}))})),
+  progress(refId){
+    const out = {total:0, done:0, clientId:null, projectId:null, clientName:'', projectName:''};
+    if (!data) return out;
+    for (const c of data.clients) for (const p of c.projects) for (const t of p.tasks){
+      if (!t.ref || t.ref.id !== refId) continue;
+      out.total++; if (t.done) out.done++;
+      if (!out.projectId){ out.clientId = c.id; out.projectId = p.id; out.clientName = c.name; out.projectName = p.name; }
+    }
+    return out;
+  },
+  addTasks({clientId, clientName, clientEmoji, projectId, projectName, tasks, ref}){
+    ensureData();
+    let c = findClient(clientId);
+    if (!c){ c = {id:uid(), name:clientName || 'Cliente sin nombre', emoji:clientEmoji ? firstGrapheme(clientEmoji) : '', collapsed:false, projects:[]}; data.clients.push(c); }
+    let p = findProject(c, projectId);
+    if (!p){ p = {id:uid(), name:projectName || 'Proyecto sin nombre', createdAt:now(), links:[], tasks:[]}; c.projects.push(p); }
+    for (const text of tasks) p.tasks.push({id:uid(), text, done:false, urgent:false, createdAt:now(), doneAt:null, ref});
+    c.collapsed = false;
+    ui.clientId = c.id; ui.projectId = p.id; ui.filter = 'all';
+    changed();
+    return {clientId:c.id, projectId:p.id};
+  },
+  open(clientId, projectId){
+    const c = findClient(clientId);
+    if (!c) return false;
+    c.collapsed = false;
+    ui.clientId = c.id; ui.projectId = findProject(c, projectId) ? projectId : null; ui.filter = 'all';
+    if (ui.view === 'connect') ui.view = null;
+    render();
+    return true;
+  }
+};
+(function mountSpaces(){
+  const h = koruHub(), el = $('#ksvtSpaces');
+  if (!h || !el) return;
+  el.hidden = false;
+  el.innerHTML = [['tareas','Tareas'],['planner','Planner'],['textos','Textos']].map(([k, l]) =>
+    `<button class="${k === 'tareas' ? 'active' : ''}" data-space="${k}" role="tab" aria-selected="${k === 'tareas'}">${l}</button>`).join('');
+  el.addEventListener('click', e => { const b = e.target.closest('[data-space]'); if (b && b.dataset.space !== 'tareas') h.go(b.dataset.space); });
+})();
+
 gh.cfg = loadCfg();
 if (gh.cfg) startGitHub(); else render();
+})();
+</script>
+
+</template>
+
+<!-- ===== Espacios Planner y Textos. Datos: guiones.json ===== -->
+<template id="app-escritorio">
+<style>
+/* ===== KSVT 1.1 — primitivas ===== */
+:root{
+  --gray-900:#1d1d1d;--gray-850:#232323;--gray-800:#2e2e2e;--gray-750:#383838;--gray-700:#404040;
+  --gray-600:#4c4c4c;--gray-500:#818181;--gray-400:#a1a1a1;--gray-300:#b4b4b4;--gray-100:#d6d6d6;--white:#ffffff;
+  --orange-300:#ff8f78;--orange-400:#f56b50;--orange-500:#e8543a;--orange-600:#c94328;--orange-700:#b83f2a;--orange-950:#2a0d07;
+  --green-500:#8fb46a;--green-950:#16210c;
+  --red-surface:#3a2323;--red-on-surface:#f0c0b6;
+}
+/* ===== KSVT 1.1 — semánticas ===== */
+:root{
+  --border-default:var(--gray-900);
+  --border-strong:var(--gray-600);
+  --border-accent:var(--orange-700);
+  --text-primary:var(--gray-100);
+  --text-secondary:var(--gray-300);
+  --text-tertiary:var(--gray-400);
+  --text-on-accent:var(--white);
+  --text-accent:var(--orange-300);
+  --accent:var(--orange-500);
+  --accent-hover:var(--orange-400);
+  --accent-fill:var(--orange-600);
+  --accent-wash:rgba(232,84,58,.08);
+  --accent-glow:rgba(232,84,58,.35);
+  --status-success:var(--green-500);
+  --status-danger-surface:var(--red-surface);
+  --status-danger-text:var(--red-on-surface);
+  --focus-ring:0 0 0 2px var(--accent);
+  --focus-offset:1px;
+  --space-1:4px;--space-2:6px;--space-3:10px;--space-4:14px;--space-5:20px;--space-6:28px;
+  --radius-pill:999px;
+  --font-weight-regular:400;--font-weight-strong:600;
+  --duration-fast:120ms;--duration-move:140ms;--duration-fade:180ms;
+  --ease-move:cubic-bezier(.2,.8,.3,1);
+  --lift-hover:2px;--press-scale:.97;
+  --shadow-hover:0 2px 8px var(--accent-glow);
+  --shadow-float:0 10px 28px rgba(0,0,0,.45);
+}
+/* ===== Variante Refugio (heredada de koru-project-tracker) =====
+   Cambian forma, aire, tipografía y profundidad. Paleta y estados intactos. */
+:root{
+  --surface-canvas:var(--gray-850);
+  --surface-panel:var(--gray-800);
+  --surface-card:var(--gray-800);
+  --surface-raised:var(--gray-750);
+  --surface-sunken:var(--gray-900);
+  --surface-soft:rgba(255,255,255,.06);
+  --surface-soft-hover:rgba(255,255,255,.1);
+  --surface-selected:rgba(232,84,58,.15);
+  --surface-overlay:rgba(12,12,12,.6);
+  --border-soft:rgba(255,255,255,.07);
+
+  --font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",system-ui,"Helvetica Neue",Helvetica,Arial,sans-serif;
+  --font-size-support:12px;
+  --font-size-label:13px;
+  --font-size-action:14px;
+  --font-size-body:15px;
+  --font-size-card-title:16px;
+  --font-size-title:30px;
+  --line-height:1.5;
+
+  --space-7:40px;--space-8:56px;
+  --radius:8px;--radius-md:10px;--radius-lg:14px;--radius-xl:18px;
+
+  --control-height:36px;
+  --control-height-compact:28px;
+  --control-padding:8px 14px;
+  --panel-width-left:340px;
+  --panel-width-right:288px;
+  --content-max-width:830px;
+
+  --shadow-card:0 1px 2px rgba(0,0,0,.28);
+  --shadow-active:0 1px 3px rgba(0,0,0,.4);
+
+  /* Extensión propuesta para Guiones */
+  --kind-column:156px;     /* ancho de la etiqueta de tipo de línea */
+  --day-min-height:112px;  /* alto mínimo de un día en el calendario */
+  --status-dot:8px;
+}
+
+/* ===== Base ===== */
+*{box-sizing:border-box;}
+html,body{height:100%;margin:0;}
+body{
+  background:var(--surface-canvas);color:var(--text-primary);
+  font:var(--font-weight-regular) var(--font-size-body)/var(--line-height) var(--font-family);
+  -webkit-font-smoothing:antialiased;overflow:hidden;
+}
+button,input,select,textarea{font:inherit;color:inherit;}
+:focus-visible{outline:none;box-shadow:var(--focus-ring);outline-offset:var(--focus-offset);}
+[hidden]{display:none !important;}
+/* Barras de desplazamiento: invisibles en reposo, finas al pasar el cursor (igual que Tareas) */
+*{scrollbar-width:thin;scrollbar-color:transparent transparent;}
+*:hover{scrollbar-color:rgba(255,255,255,.16) transparent;}
+::-webkit-scrollbar{width:10px;height:10px;}
+::-webkit-scrollbar-track,::-webkit-scrollbar-corner{background:transparent;}
+::-webkit-scrollbar-thumb{background:transparent;border:3px solid transparent;border-radius:999px;background-clip:content-box;}
+:hover::-webkit-scrollbar-thumb{background-color:rgba(255,255,255,.16);}
+::-webkit-scrollbar-thumb:hover{background-color:rgba(255,255,255,.3);}
+
+.shell{display:grid;grid-template-columns:var(--panel-width-left) minmax(0,1fr) var(--panel-width-right);height:100%;}
+.col{display:flex;flex-direction:column;overflow:hidden;background:var(--surface-panel);}
+.col-left{border-right:1px solid var(--border-soft);}
+.col-right{border-left:1px solid var(--border-soft);overflow-y:auto;}
+.center{display:flex;flex-direction:column;min-width:0;background:var(--surface-canvas);overflow:hidden;}
+
+/* ===== Botones ===== */
+.b{
+  display:inline-flex;align-items:center;justify-content:center;gap:var(--space-2);
+  height:var(--control-height);padding:var(--control-padding);
+  background:var(--surface-soft);color:var(--text-primary);
+  border:none;border-radius:var(--radius-md);
+  font-size:var(--font-size-label);font-weight:var(--font-weight-strong);
+  cursor:pointer;user-select:none;white-space:nowrap;
+  transition:background var(--duration-fast),box-shadow var(--duration-fast),transform var(--duration-fast);
+}
+.b:hover{background:var(--surface-soft-hover);color:var(--text-primary);}
+.b:active{transform:scale(var(--press-scale));}
+.b.go{background:var(--accent-fill);color:var(--text-on-accent);font-size:var(--font-size-action);}
+.b.go:hover{background:var(--accent-hover);box-shadow:0 4px 14px var(--accent-glow);}
+.b.tall{height:calc(var(--control-height) + var(--space-1));}
+.b.deliver{border-radius:var(--radius-pill);}
+.b.wide{width:100%;}
+.b.sm{height:var(--control-height-compact);padding:4px 10px;font-size:var(--font-size-support);}
+.b:disabled{opacity:.45;cursor:not-allowed;pointer-events:none;}
+.plus{font-size:18px;line-height:1;font-weight:var(--font-weight-regular);margin-top:-2px;}
+
+.ib{
+  display:inline-flex;align-items:center;justify-content:center;flex:none;
+  width:var(--control-height-compact);height:var(--control-height-compact);padding:0;
+  background:transparent;border:1px solid transparent;border-radius:var(--radius);
+  color:var(--text-tertiary);cursor:pointer;font-size:14px;line-height:1;
+  transition:background var(--duration-fast),color var(--duration-fast),border-color var(--duration-fast);
+}
+.ib:hover{background:var(--accent-wash);border-color:var(--border-accent);color:var(--text-accent);}
+.ib.danger:hover{background:var(--status-danger-surface);border-color:var(--border-accent);color:var(--status-danger-text);}
+.ib:disabled{opacity:.25;pointer-events:none;}
+
+.link-btn{
+  background:none;border:none;padding:var(--space-1) 0;cursor:pointer;
+  color:var(--text-secondary);font-size:var(--font-size-label);text-decoration:underline;text-underline-offset:3px;
+}
+.link-btn:hover{color:var(--text-primary);}
+.link-btn.danger{color:var(--status-danger-text);}
+
+/* ===== Chips ===== */
+.chips{display:flex;flex-wrap:wrap;gap:var(--space-2);}
+.chip{
+  display:inline-flex;align-items:center;gap:var(--space-2);
+  height:30px;padding:0 12px;
+  background:var(--surface-soft);border:1px solid var(--border-soft);border-radius:var(--radius-md);
+  font-size:var(--font-size-label);color:var(--text-secondary);cursor:pointer;user-select:none;
+  transition:background var(--duration-fast),color var(--duration-fast),border-color var(--duration-fast);
+}
+.chip:hover{background:var(--surface-soft-hover);color:var(--text-primary);}
+.chip.active{background:var(--surface-selected);border-color:var(--border-accent);color:var(--text-accent);}
+.chip.active:hover{background:rgba(232,84,58,.2);}
+
+/* ===== Campos ===== */
+.field{
+  width:100%;height:var(--control-height);padding:0 12px;
+  background:var(--surface-sunken);border:1px solid var(--border-soft);border-radius:var(--radius-md);
+  color:var(--text-primary);font-size:var(--font-size-label);
+}
+.field.sm{height:30px;font-size:var(--font-size-support);}
+.field:focus{outline:none;border-color:var(--border-strong);box-shadow:var(--focus-ring);}
+.field::placeholder,textarea::placeholder,input::placeholder{color:var(--text-tertiary);opacity:1;}
+input[type=date].field{color-scheme:dark;font-variant-numeric:tabular-nums;}
+select.field{appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--text-tertiary) 50%),linear-gradient(135deg,var(--text-tertiary) 50%,transparent 50%);background-position:calc(100% - 17px) 15px,calc(100% - 12px) 15px;background-size:5px 5px;background-repeat:no-repeat;padding-right:30px;cursor:pointer;}
+.flabel{display:flex;flex-direction:column;gap:var(--space-1);font-size:var(--font-size-support);color:var(--text-secondary);}
+.help{margin:var(--space-2) 0 0;font-size:var(--font-size-support);color:var(--text-tertiary);line-height:1.45;}
+
+/* ===== Estados de una pieza ===== */
+.sdot{width:var(--status-dot);height:var(--status-dot);border-radius:50%;flex:none;display:inline-block;}
+.s-idea{box-shadow:inset 0 0 0 1.5px var(--gray-500);}
+.s-guion{background:var(--gray-300);}
+.s-produccion{background:var(--accent);}
+.s-programada{box-shadow:inset 0 0 0 1.5px var(--accent);}
+.s-publicada{background:var(--status-success);}
+.tglyph{flex:none;width:12px;text-align:center;font-size:10px;color:var(--text-tertiary);}
+
+/* ===== Panel izquierdo ===== */
+.left-top{padding:var(--space-4);}
+.brand{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-5) var(--space-5) var(--space-2);}
+.brand-mark{width:30px;height:30px;border-radius:9px;flex:none;background:var(--accent-fill);color:var(--text-on-accent);display:flex;align-items:center;justify-content:center;font-size:var(--font-size-support);font-weight:700;}
+.brand-text{display:flex;flex-direction:column;min-width:0;}
+.brand-name{font-size:var(--font-size-action);font-weight:var(--font-weight-strong);line-height:1.3;}
+.brand-date{font-size:var(--font-size-support);color:var(--text-tertiary);line-height:1.3;}
+.brand-sys{margin-left:auto;align-self:flex-start;font-size:var(--font-size-support);color:var(--text-tertiary);}
+.ksvt-spaces{display:flex;margin:var(--space-3) var(--space-4) 0;}
+.ksvt-spaces .seg-btn{flex:1;height:28px;padding:0 6px;border-radius:7px;}
+.tree{flex:1;overflow-y:auto;padding:var(--space-1) var(--space-3) var(--space-4);}
+.tree-row{display:flex;align-items:center;gap:2px;min-height:36px;padding:0 var(--space-1);border-radius:var(--radius);transition:background var(--duration-fast);}
+.tree-row:hover{background:var(--surface-soft);}
+.tree-row.active{background:var(--surface-selected);}
+.tree-row.active .count{color:var(--text-accent);}
+.caret,.caret-space{flex:none;width:22px;height:22px;}
+.caret{display:grid;place-items:center;padding:0;background:none;border:none;border-radius:6px;color:var(--text-tertiary);font-size:10px;cursor:pointer;transition:transform var(--duration-move) var(--ease-move),color var(--duration-fast);}
+.caret:hover{color:var(--text-primary);}
+.caret.open{transform:rotate(90deg);}
+.tree-main{flex:1;min-width:0;display:flex;align-items:center;gap:var(--space-3);height:36px;padding:0 var(--space-1);background:transparent;border:none;border-radius:var(--radius);text-align:left;cursor:pointer;}
+.tree-main .name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--font-size-action);font-weight:var(--font-weight-strong);}
+.count{font-size:var(--font-size-support);font-variant-numeric:tabular-nums;color:var(--text-tertiary);}
+.avatar{display:inline-grid;place-items:center;flex:none;width:24px;height:24px;border-radius:7px;background:var(--surface-soft);font-size:13px;font-weight:var(--font-weight-strong);color:var(--text-secondary);}
+.avatar.all{font-size:12px;color:var(--text-tertiary);}
+.tree-pieces{display:flex;flex-direction:column;gap:1px;margin:2px 0 var(--space-2) 28px;padding-left:var(--space-2);border-left:1px solid var(--border-soft);}
+.tree-piece{display:flex;align-items:center;gap:var(--space-2);height:32px;padding:0 var(--space-2);background:none;border:none;border-radius:var(--radius);text-align:left;cursor:pointer;color:var(--text-secondary);font-size:var(--font-size-label);transition:background var(--duration-fast),color var(--duration-fast);}
+.tree-piece:hover{background:var(--surface-soft);color:var(--text-primary);}
+.tree-piece.sel{background:var(--surface-selected);color:var(--text-accent);}
+.tree-piece .pname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pdate{font-size:var(--font-size-support);color:var(--text-tertiary);font-variant-numeric:tabular-nums;white-space:nowrap;}
+.tree-empty{margin:var(--space-1) var(--space-2) var(--space-2);font-size:var(--font-size-support);color:var(--text-tertiary);}
+.new-brand{margin:var(--space-2) var(--space-2) 0;}
+
+.left-bottom{padding:var(--space-3);border-top:1px solid var(--border-soft);}
+.store-card{padding:var(--space-3) var(--space-4) var(--space-4);background:var(--surface-canvas);border:1px solid var(--border-soft);border-radius:var(--radius-lg);}
+.store-head{display:flex;align-items:center;gap:var(--space-2);font-size:var(--font-size-label);font-weight:var(--font-weight-strong);}
+.store-dot{width:var(--status-dot);height:var(--status-dot);border-radius:50%;background:var(--gray-500);flex:none;}
+.store-dot.ok{background:var(--status-success);}
+.store-dot.warn{background:var(--accent);}
+.store-dot.bad{background:var(--status-danger-text);}
+.store-repo{margin:2px 0 0 14px;font-size:var(--font-size-support);color:var(--text-tertiary);}
+.store-status{margin:var(--space-2) 0 var(--space-3);font-size:var(--font-size-support);color:var(--text-secondary);line-height:1.45;}
+.store-status.bad{color:var(--status-danger-text);}
+.store-btns{display:flex;gap:var(--space-2);flex-wrap:wrap;}
+.connect-form{display:flex;flex-direction:column;gap:var(--space-3);margin-top:var(--space-3);padding-top:var(--space-3);border-top:1px solid var(--border-soft);}
+
+/* ===== Centro ===== */
+.center-head{display:flex;align-items:center;gap:var(--space-4);padding:var(--space-5) var(--space-6) var(--space-4);flex:none;min-height:80px;}
+.month{flex:1;margin:0;font-size:26px;font-weight:700;letter-spacing:-.01em;}
+.crumb{flex:1;display:flex;align-items:center;gap:var(--space-3);font-size:var(--font-size-action);color:var(--text-secondary);font-weight:var(--font-weight-strong);}
+.head-nav{display:flex;align-items:center;gap:var(--space-1);}
+.seg{display:inline-flex;gap:2px;padding:3px;background:var(--surface-sunken);border-radius:var(--radius-md);}
+.seg-btn{height:30px;padding:0 14px;background:transparent;border:none;border-radius:var(--radius);color:var(--text-secondary);font-size:var(--font-size-label);font-weight:var(--font-weight-strong);cursor:pointer;transition:background var(--duration-fast),color var(--duration-fast);}
+.seg-btn:hover{color:var(--text-primary);}
+.seg-btn.active{background:var(--surface-raised);color:var(--text-primary);box-shadow:var(--shadow-active);}
+.seg-btn:disabled{opacity:.45;cursor:not-allowed;}
+.center-body{flex:1;overflow:auto;}
+
+/* ===== Espacios, Prompts y Banco ===== */
+.tree-label{margin:var(--space-4) var(--space-2) var(--space-1);font-size:var(--font-size-support);font-weight:var(--font-weight-strong);color:var(--text-tertiary);}
+.tree-label:first-child{margin-top:var(--space-1);}
+.part-text,.note-text{
+  display:block;width:100%;min-height:72px;padding:var(--space-3) var(--space-4);resize:none;overflow:hidden;
+  background:var(--surface-sunken);border:1px solid var(--border-soft);border-radius:var(--radius-md);
+  font-size:16px;line-height:1.65;color:var(--text-primary);
+}
+.part-text.main{min-height:150px;}
+.note-text{min-height:300px;}
+.part-text:focus,.note-text:focus{outline:none;border-color:var(--border-strong);box-shadow:var(--focus-ring);}
+.add-row.prompt-add{padding-left:0;margin:0 0 var(--space-4);}
+.tree > .tree-piece{width:100%;}
+.reading{max-width:720px;margin:0 auto;padding:0 var(--space-6) var(--space-8);}
+.reading-hint{margin:0 0 var(--space-4);font-size:var(--font-size-label);color:var(--text-tertiary);}
+.reading-text{padding:var(--space-6);background:var(--surface-panel);border:1px solid var(--border-soft);border-radius:var(--radius-xl);box-shadow:var(--shadow-card);font-size:17px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;}
+.reading-empty{color:var(--text-tertiary);}
+.checks{display:flex;flex-direction:column;gap:var(--space-2);}
+.check{display:flex;align-items:flex-start;gap:var(--space-3);font-size:var(--font-size-label);line-height:1.45;}
+.check .sdot{margin-top:6px;}
+.capture-card textarea{
+  display:block;width:100%;min-height:96px;margin-bottom:var(--space-2);padding:var(--space-3);resize:none;overflow:hidden;
+  background:var(--surface-sunken);border:1px solid var(--border-soft);border-radius:var(--radius-md);font-size:var(--font-size-body);line-height:1.5;
+}
+.capture-card textarea:focus{outline:none;border-color:var(--border-strong);box-shadow:var(--focus-ring);}
+.capture-row{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);}
+.capture-row .chips{flex:1;}
+.cap-topic{width:170px;height:var(--control-height);}
+.ncards{display:flex;flex-direction:column;gap:var(--space-2);}
+.ncard{
+  display:flex;flex-direction:column;gap:var(--space-2);width:100%;padding:var(--space-4);
+  background:var(--surface-panel);border:1px solid var(--border-soft);border-radius:var(--radius-lg);box-shadow:var(--shadow-card);
+  text-align:left;cursor:pointer;transition:background var(--duration-fast),border-color var(--duration-fast);
+}
+.ncard:hover{background:var(--surface-raised);border-color:var(--border-strong);}
+.ncard-meta{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);}
+.ncard-meta .ledited{margin-left:auto;}
+.ncard-title{font-size:var(--font-size-card-title);font-weight:var(--font-weight-strong);line-height:1.35;}
+.ncard.k-frase .ncard-title{font-size:18px;font-style:italic;font-weight:500;}
+.ncard-text{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-line;font-size:14px;line-height:1.5;color:var(--text-secondary);}
+.hint-empty{margin:var(--space-5) 0;text-align:center;font-size:var(--font-size-label);color:var(--text-tertiary);}
+.head-search{flex:none;width:260px;}
+.frases{display:flex;flex-direction:column;gap:var(--space-2);}
+.frase{display:flex;align-items:flex-start;gap:var(--space-2);padding:var(--space-2) var(--space-3);background:var(--surface-soft);border-radius:var(--radius-md);}
+.frase-text{flex:1;min-width:0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-line;font-size:var(--font-size-label);font-style:italic;line-height:1.45;}
+.src-link{display:inline-block;margin-top:var(--space-2);font-size:var(--font-size-label);color:var(--text-accent);}
+
+/* ===== Puente con Tareas ===== */
+.tbar{display:block;height:6px;margin-top:var(--space-3);background:rgba(255,255,255,.1);border-radius:var(--radius-pill);overflow:hidden;}
+.tbar i{display:block;height:100%;background:var(--accent);border-radius:var(--radius-pill);}
+.tbar.done i{background:var(--status-success);}
+.tf{display:flex;flex-direction:column;gap:var(--space-3);}
+.tf-tasks{height:auto;min-height:110px;padding:var(--space-2) var(--space-3);resize:vertical;line-height:1.5;}
+.ltasks{font-size:var(--font-size-support);color:var(--text-secondary);font-variant-numeric:tabular-nums;padding:2px 8px;border-radius:var(--radius-pill);background:var(--surface-soft);}
+.ltasks.ok{color:var(--status-success);}
+
+/* ===== Lista de guiones ===== */
+.list{display:flex;flex-direction:column;gap:var(--space-4);max-width:var(--content-max-width);margin:0 auto;padding:0 var(--space-6) var(--space-8);}
+.lgroup{padding:var(--space-2);background:var(--surface-panel);border:1px solid var(--border-soft);border-radius:var(--radius-lg);box-shadow:var(--shadow-card);}
+.lgroup.week{border-color:var(--border-accent);}
+.lgroup-head{display:flex;align-items:center;gap:var(--space-2);width:100%;height:38px;padding:0 var(--space-2);background:none;border:none;border-radius:var(--radius);text-align:left;cursor:pointer;transition:background var(--duration-fast);}
+.lgroup-head:hover{background:var(--surface-soft);}
+.lgroup-head .caret{display:grid;width:18px;height:18px;}
+.lgroup-title{flex:1;font-size:var(--font-size-action);font-weight:var(--font-weight-strong);}
+.lgroup-help{margin:0 var(--space-2) var(--space-2) 34px;font-size:var(--font-size-support);color:var(--text-tertiary);}
+.lrows{display:flex;flex-direction:column;gap:1px;}
+.lrow{display:flex;align-items:center;gap:var(--space-3);width:100%;min-height:46px;padding:0 var(--space-3);background:none;border:none;border-radius:var(--radius-md);text-align:left;cursor:pointer;transition:background var(--duration-fast);}
+.lrow:hover{background:var(--surface-soft);}
+.lname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--font-size-body);}
+.ledited{font-size:var(--font-size-support);color:var(--text-tertiary);white-space:nowrap;}
+.ldate{min-width:104px;text-align:right;font-size:var(--font-size-label);color:var(--text-secondary);font-variant-numeric:tabular-nums;white-space:nowrap;}
+.ldate.urgent{color:var(--text-accent);font-weight:var(--font-weight-strong);}
+.ldate.none{color:var(--text-tertiary);}
+.avatar.xs{width:20px;height:20px;border-radius:6px;font-size:11px;}
+.capture{display:flex;align-items:center;gap:var(--space-3);min-height:46px;padding:0 var(--space-3);border:1px solid transparent;border-radius:var(--radius-md);color:var(--text-tertiary);cursor:text;transition:background var(--duration-fast);}
+.capture:hover{background:var(--surface-soft);}
+.capture:focus-within{background:var(--surface-sunken);border-color:var(--border-strong);box-shadow:var(--focus-ring);}
+.capture .plus{width:18px;text-align:center;}
+.capture-input{flex:1;height:38px;padding:0;background:transparent;border:none;font-size:var(--font-size-body);color:var(--text-primary);}
+.capture-input:focus{outline:none;}
+
+/* ===== Modo escritura ===== */
+.shell{transition:grid-template-columns var(--duration-fade) var(--ease-move);}
+.shell.focus{grid-template-columns:0 minmax(0,1fr) 0;}
+.shell.focus .col{visibility:hidden;border:none;}
+.back{flex:none;}
+
+/* ===== Calendario ===== */
+.cal{display:flex;flex-direction:column;gap:var(--space-3);min-height:100%;padding:0 var(--space-6) var(--space-6);}
+.cal-dow{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:var(--space-2);padding:0 var(--space-2);font-size:var(--font-size-support);color:var(--text-tertiary);}
+.cal-grid{flex:1;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:var(--space-2);}
+.day{
+  position:relative;display:flex;flex-direction:column;gap:var(--space-1);min-width:0;min-height:var(--day-min-height);padding:var(--space-2);
+  background:var(--surface-panel);border:1px solid var(--border-soft);border-radius:var(--radius-md);
+  transition:border-color var(--duration-fast),background var(--duration-fast);
+}
+.day.out{background:transparent;}
+.day.out .dnum{opacity:.5;}
+.day.drop,.undated.drop{border-color:var(--accent);background:var(--accent-wash);}
+.day-head{display:flex;align-items:center;justify-content:space-between;height:24px;}
+.dnum{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;font-size:var(--font-size-label);font-variant-numeric:tabular-nums;color:var(--text-secondary);}
+.day.today .dnum{background:var(--accent-fill);color:var(--text-on-accent);font-weight:var(--font-weight-strong);}
+.add-day{width:24px;height:24px;opacity:0;transition:opacity var(--duration-fast),background var(--duration-fast),color var(--duration-fast),border-color var(--duration-fast);}
+.day:hover .add-day,.add-day:focus-visible{opacity:1;}
+.day-items{display:flex;flex-direction:column;gap:3px;min-width:0;}
+.pchip{
+  display:flex;align-items:flex-start;gap:5px;min-width:0;padding:5px var(--space-2);
+  background:var(--surface-soft);border-radius:6px;font-size:var(--font-size-support);line-height:1.3;color:var(--text-primary);
+  cursor:grab;user-select:none;touch-action:none;transition:background var(--duration-fast),color var(--duration-fast);
+}
+.pchip:hover{background:var(--surface-soft-hover);}
+.pchip.sel{background:var(--surface-selected);color:var(--text-accent);}
+.pchip .pname{flex:1;min-width:0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+.pchip .sdot{margin-top:4px;}
+.pchip .tg{margin-right:4px;font-size:9px;color:var(--text-tertiary);}
+.pchip.sel .tg{color:inherit;}
+.pchip.dragging{opacity:.35;}
+.pchip.ghost{position:fixed;left:0;top:0;z-index:60;width:180px;pointer-events:none;background:var(--surface-raised);box-shadow:var(--shadow-float);}
+body.dragging-piece,body.dragging-piece *{cursor:grabbing !important;}
+.undated{padding:var(--space-3) var(--space-4) var(--space-4);border:1px dashed var(--border-strong);border-radius:var(--radius-lg);transition:border-color var(--duration-fast),background var(--duration-fast);}
+.undated-head{display:flex;align-items:center;gap:var(--space-2);margin-bottom:var(--space-3);font-size:var(--font-size-label);font-weight:var(--font-weight-strong);color:var(--text-secondary);}
+.undated-items{display:flex;flex-wrap:wrap;gap:var(--space-2);}
+.undated .pchip{max-width:260px;padding:7px 10px;}
+.undated .hint{margin:0;font-size:var(--font-size-support);color:var(--text-tertiary);}
+
+/* ===== Editor de guion ===== */
+.editor{max-width:var(--content-max-width);margin:0 auto;padding:var(--space-1) var(--space-6) var(--space-8);}
+.empty{max-width:420px;margin:12vh auto 0;text-align:center;color:var(--text-secondary);}
+.empty p{margin:0 0 var(--space-4);}
+.title-input{width:100%;padding:var(--space-1) var(--space-2);margin-left:calc(-1 * var(--space-2));background:transparent;border:1px solid transparent;border-radius:var(--radius);font-size:var(--font-size-title);font-weight:700;letter-spacing:-.015em;line-height:1.25;}
+.title-input:hover{background:var(--surface-soft);}
+.title-input:focus{outline:none;background:var(--surface-sunken);border-color:var(--border-strong);box-shadow:var(--focus-ring);}
+.meta{display:flex;flex-wrap:wrap;gap:var(--space-2);margin:var(--space-3) 0 var(--space-6);}
+.tag{display:inline-flex;align-items:center;gap:var(--space-2);height:26px;padding:0 10px;border-radius:var(--radius-pill);background:var(--surface-soft);font-size:var(--font-size-support);color:var(--text-secondary);font-variant-numeric:tabular-nums;}
+.sec{margin-bottom:var(--space-4);padding:var(--space-3) var(--space-4) var(--space-4);background:var(--surface-panel);border:1px solid var(--border-soft);border-radius:var(--radius-lg);box-shadow:var(--shadow-card);}
+.sec-head{display:flex;align-items:center;gap:var(--space-2);margin-bottom:var(--space-2);}
+.sec-num{display:grid;place-items:center;flex:none;width:24px;height:24px;border-radius:50%;background:var(--surface-soft);font-size:var(--font-size-support);font-weight:var(--font-weight-strong);color:var(--text-secondary);font-variant-numeric:tabular-nums;}
+.sec-title{flex:1;min-width:0;padding:var(--space-1) var(--space-2);background:transparent;border:1px solid transparent;border-radius:var(--radius);font-size:var(--font-size-card-title);font-weight:var(--font-weight-strong);}
+.sec-title:hover{background:var(--surface-soft);}
+.sec-title:focus{outline:none;background:var(--surface-sunken);border-color:var(--border-strong);box-shadow:var(--focus-ring);}
+.cap-title{flex:1;margin:0;padding:var(--space-1) var(--space-2);font-size:var(--font-size-card-title);font-weight:var(--font-weight-strong);}
+.sec-dur{font-size:var(--font-size-support);color:var(--text-tertiary);font-variant-numeric:tabular-nums;white-space:nowrap;}
+.sec-tools,.blk-tools{display:flex;gap:2px;opacity:0;transition:opacity var(--duration-fast);}
+.sec-head:hover .sec-tools,.sec-head:focus-within .sec-tools,.blk:hover .blk-tools,.blk:focus-within .blk-tools{opacity:1;}
+.blk{display:grid;grid-template-columns:var(--kind-column) minmax(0,1fr) auto;align-items:start;gap:var(--space-2);padding:2px 0;}
+.kind{
+  justify-self:start;max-width:100%;height:28px;margin-top:3px;padding:0 10px;overflow:hidden;text-overflow:ellipsis;
+  background:var(--surface-soft);border:1px solid var(--border-soft);border-radius:var(--radius-pill);
+  font-size:var(--font-size-support);font-weight:var(--font-weight-strong);color:var(--text-tertiary);white-space:nowrap;cursor:pointer;
+  transition:background var(--duration-fast),color var(--duration-fast);
+}
+.kind:hover{background:var(--surface-soft-hover);color:var(--text-primary);}
+.k-voz .kind{color:var(--text-primary);background:var(--surface-raised);}
+.blk textarea{
+  display:block;width:100%;min-height:36px;padding:6px var(--space-2);resize:none;overflow:hidden;
+  background:transparent;border:1px solid transparent;border-radius:var(--radius);
+  font-size:var(--font-size-body);line-height:1.5;color:var(--text-primary);
+  transition:background var(--duration-fast);
+}
+.blk textarea:hover{background:var(--surface-soft);}
+.blk textarea:focus{outline:none;background:var(--surface-sunken);border-color:var(--border-strong);box-shadow:var(--focus-ring);}
+.blk-tools{margin-top:4px;}
+.k-accion textarea,.k-visual textarea{font-style:italic;color:var(--text-secondary);}
+.k-texto textarea{font-weight:var(--font-weight-strong);}
+.k-sonido textarea{color:var(--text-secondary);}
+.k-nota textarea{font-size:var(--font-size-label);color:var(--text-tertiary);}
+.add-row{display:flex;flex-wrap:wrap;gap:var(--space-1);margin-top:var(--space-2);padding-left:calc(var(--kind-column) + var(--space-2));}
+.add-kind{
+  height:26px;padding:0 10px;background:transparent;border:1px dashed var(--border-strong);border-radius:var(--radius-pill);
+  font-size:var(--font-size-support);color:var(--text-tertiary);cursor:pointer;
+  transition:background var(--duration-fast),color var(--duration-fast),border-color var(--duration-fast);
+}
+.add-kind:hover{background:var(--accent-wash);border-color:var(--accent);color:var(--text-accent);}
+.add-sec{
+  display:flex;align-items:center;justify-content:center;width:100%;height:44px;margin-bottom:var(--space-6);
+  background:transparent;border:1px dashed var(--border-strong);border-radius:var(--radius-lg);
+  font-size:var(--font-size-label);font-weight:var(--font-weight-strong);color:var(--text-secondary);cursor:pointer;
+  transition:background var(--duration-fast),color var(--duration-fast),border-color var(--duration-fast);
+}
+.add-sec:hover{background:var(--accent-wash);border-color:var(--accent);color:var(--text-accent);}
+.caption-card textarea{
+  display:block;width:100%;min-height:96px;margin-bottom:var(--space-2);padding:var(--space-2) var(--space-3);resize:none;overflow:hidden;
+  background:var(--surface-sunken);border:1px solid var(--border-soft);border-radius:var(--radius-md);
+  font-size:var(--font-size-body);line-height:1.5;
+}
+.caption-card textarea:focus{outline:none;border-color:var(--border-strong);box-shadow:var(--focus-ring);}
+
+/* ===== Panel derecho ===== */
+.group{padding:var(--space-4);border-bottom:1px solid var(--border-soft);}
+.group h2{margin:0 0 var(--space-3);font-size:var(--font-size-support);font-weight:var(--font-weight-strong);color:var(--text-tertiary);}
+.group.action{margin-top:auto;border-bottom:none;border-top:1px solid var(--border-soft);display:flex;flex-direction:column;align-items:center;gap:var(--space-2);}
+.piece-name{margin:0 0 var(--space-3);font-size:var(--font-size-card-title);font-weight:var(--font-weight-strong);line-height:1.3;overflow-wrap:anywhere;}
+.row{display:flex;align-items:center;gap:var(--space-3);}
+.sunken{padding:var(--space-3) var(--space-4);background:var(--surface-sunken);border-radius:var(--radius-md);font-size:var(--font-size-label);color:var(--text-secondary);line-height:1.6;}
+.sunken strong{font-size:var(--font-size-card-title);color:var(--text-primary);font-variant-numeric:tabular-nums;}
+.stats{display:flex;flex-direction:column;gap:var(--space-1);}
+.stat{display:flex;align-items:center;gap:var(--space-3);}
+.stat span:nth-child(2){flex:1;}
+.stat b{font-weight:var(--font-weight-strong);color:var(--text-primary);font-variant-numeric:tabular-nums;}
+.subhead{margin:var(--space-4) 0 var(--space-2);font-size:var(--font-size-support);color:var(--text-secondary);}
+.subhead:first-of-type{margin-top:0;}
+.links{display:flex;flex-direction:column;gap:var(--space-2);margin-bottom:var(--space-2);}
+.link-row{display:flex;align-items:flex-start;gap:var(--space-1);padding:var(--space-2);background:var(--surface-soft);border-radius:var(--radius-md);}
+.link-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:var(--space-1);}
+.link-main a{font-size:var(--font-size-label);color:var(--text-accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-decoration:none;}
+.link-main a:hover{text-decoration:underline;}
+.dropzone{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--space-1);
+  padding:18px var(--space-3);text-align:center;cursor:pointer;
+  border:1px dashed var(--border-strong);border-radius:var(--radius-md);
+  font-size:var(--font-size-label);color:var(--text-primary);
+  transition:border-color var(--duration-fast),background var(--duration-fast);
+}
+.dropzone span{font-size:var(--font-size-support);color:var(--text-tertiary);}
+.dropzone:hover,.dropzone.over,body.file-over .dropzone{border-color:var(--accent);background:var(--accent-wash);}
+.thumbs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-2);margin-top:var(--space-3);}
+.thumb{position:relative;aspect-ratio:1;border-radius:var(--radius);overflow:hidden;background:var(--surface-sunken);}
+.thumb img{display:block;width:100%;height:100%;object-fit:cover;cursor:zoom-in;}
+.thumb.loading{animation:pulse 1.2s ease-in-out infinite;}
+.thumb.loading img,.thumb.failed img{visibility:hidden;}
+.thumb.failed::after{content:"!";position:absolute;inset:0;display:grid;place-items:center;color:var(--status-danger-text);font-weight:var(--font-weight-strong);}
+.thumb-del{position:absolute;top:4px;right:4px;background:rgba(0,0,0,.55);color:var(--text-primary);opacity:0;}
+.thumb:hover .thumb-del,.thumb-del:focus-visible{opacity:1;}
+@keyframes pulse{50%{background:var(--surface-soft-hover);}}
+.brand-edit{display:grid;grid-template-columns:48px 1fr;gap:var(--space-2);}
+.emoji-field{text-align:center;padding:0;font-size:16px;}
+
+/* ===== Superpuestos ===== */
+.toast{
+  position:fixed;left:50%;bottom:var(--space-6);z-index:80;transform:translateX(-50%);
+  max-width:min(560px,calc(100vw - 40px));padding:var(--space-3) var(--space-4);
+  background:var(--status-danger-surface);border:1px solid var(--border-accent);border-radius:var(--radius-md);
+  color:var(--status-danger-text);font-size:var(--font-size-label);box-shadow:var(--shadow-float);
+}
+.lightbox{position:fixed;inset:0;z-index:70;display:grid;place-items:center;background:var(--surface-overlay);backdrop-filter:blur(6px);}
+.lightbox img{max-width:88vw;max-height:88vh;border-radius:var(--radius-md);box-shadow:var(--shadow-float);}
+.lb-close{position:absolute;top:var(--space-5);right:var(--space-5);width:36px;height:36px;font-size:20px;background:var(--surface-raised);color:var(--text-primary);}
+
+@media (prefers-reduced-motion:reduce){
+  *{transition:none !important;animation:none !important;}
+}
+</style>
+<div class="shell">
+  <aside class="col col-left" aria-label="Navegación">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">K</span><span class="brand-text"><span class="brand-name">Koru</span><span class="brand-date" id="today"></span></span><span class="brand-sys">KSVT</span></div>
+    <div class="seg ksvt-spaces" id="spaces" role="tablist" aria-label="Espacio"></div>
+    <div class="left-top"><button class="b go wide tall" id="primaryBtn"></button></div>
+    <nav class="tree" id="tree"></nav>
+    <div class="left-bottom" id="storage"></div>
+  </aside>
+  <main class="center">
+    <header class="center-head" id="head"></header>
+    <div class="center-body" id="body"></div>
+  </main>
+  <aside class="col col-right" id="right" aria-label="Ajustes"></aside>
+</div>
+<div class="toast" id="toast" role="alert" hidden></div>
+<div class="lightbox" id="lightbox" hidden><img alt=""><button class="ib lb-close" id="lbClose" title="Cerrar">×</button></div>
+<input type="file" id="fileInput" accept=".json,application/json" hidden>
+<input type="file" id="imgInput" accept="image/*" multiple hidden>
+
+<script>
+(() => {
+'use strict';
+
+/* ===== Constantes ===== */
+const MONTHS = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+const MONTHS_SHORT = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+const DOW = ['lun','mar','mié','jue','vie','sáb','dom'];
+const TYPES = [['video','Video','▶'],['carrusel','Carrusel','❐'],['post','Post único','▢']];
+const TYPE_HELP = {
+  video:'Secuencia en el tiempo: voz en off, acción, texto en pantalla y sonido.',
+  carrusel:'Diapositivas en orden, sin duración: texto en imagen y lo que se ve.',
+  post:'Una sola imagen: el texto que lleva, lo que se ve y el copy.'
+};
+const STATES = [['idea','Idea'],['guion','Guion'],['produccion','Producción'],['programada','Programada'],['publicada','Publicada']];
+const KINDS_VIDEO = [['voz','Voz en off'],['accion','Acción'],['texto','Texto en pantalla'],['sonido','Sonido'],['nota','Nota']];
+const KINDS_STATIC = [['texto','Texto en imagen'],['visual','Visual'],['nota','Nota']];
+const SHORTCUTS = {vo:'voz',voz:'voz',off:'voz',acc:'accion',accion:'accion','acción':'accion',txt:'texto',texto:'texto',son:'sonido',sfx:'sonido',sonido:'sonido',vis:'visual',visual:'visual',nota:'nota'};
+const TO_STATIC = {voz:'texto',accion:'visual',sonido:'nota'};
+const SPACES = [['tareas','Tareas'],['planner','Planner'],['textos','Textos']];
+const PROMPT_PARTS = [
+  ['contexto','Contexto','Quién eres, en qué proyecto estás y qué existe ya'],
+  ['pedido','Qué necesito','La tarea concreta, en una o dos frases'],
+  ['restricciones','Restricciones','Qué no debe hacer, límites, tono'],
+  ['formato','Formato de respuesta','Cómo quieres recibirlo: lista, tabla, código, extensión'],
+  ['ejemplos','Ejemplos','Un ejemplo de lo que sí quieres y, si ayuda, de lo que no']
+];
+const NOTE_KINDS = [['frase','Frase de marca','Frases de marca','❝'],['idea','Idea','Ideas','✦'],['ia','Respuesta de IA','Respuestas de IA','◆'],['referencia','Referencia','Referencias','↗']];
+const TO_VIDEO = {visual:'accion'};
+const WORDS_PER_SECOND = 2.5;
+const CAPTION_LIMIT = 2200;
+const FILE = 'guiones.json';
+const MEDIA = 'guiones-media/';
+const CFG_KEY = 'ksvt-guiones-github';
+
+/* ===== Utilidades ===== */
+const $ = s => document.querySelector(s);
+const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const cap = s => s ? s[0].toUpperCase() + s.slice(1) : s;
+const pad = n => String(n).padStart(2, '0');
+const dkey = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const parseKey = k => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); };
+const shortDate = k => { if (!k) return ''; const d = parseKey(k); return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`; };
+const longDate = k => { const d = parseKey(k); return `${DOW[(d.getDay() + 6) % 7]} ${d.getDate()} de ${MONTHS[d.getMonth()]}`; };
+const hhmm = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+const kindsFor = t => t === 'video' ? KINDS_VIDEO : KINDS_STATIC;
+const kindLabel = (t, k) => (kindsFor(t).find(x => x[0] === k) || [k, k])[1];
+const typeInfo = t => TYPES.find(x => x[0] === t) || TYPES[0];
+const stateLabel = s => (STATES.find(x => x[0] === s) || STATES[0])[1];
+const countWords = s => (String(s).trim().match(/\S+/g) || []).length;
+const voiceWords = sec => sec.blocks.filter(b => b.kind === 'voz').reduce((a, b) => a + countWords(b.text), 0);
+const totalVoiceWords = p => p.sections.reduce((a, s) => a + voiceWords(s), 0);
+const fmtDur = secs => { secs = Math.round(secs); if (secs < 60) return `${secs} s`; const m = Math.floor(secs / 60), s = secs % 60; return s ? `${m} min ${s} s` : `${m} min`; };
+const durOf = words => `≈ ${fmtDur(words / WORDS_PER_SECOND)}`;
+const placeholderFor = (t, k) => ({
+  voz:'Lo que se dice', accion:'Lo que pasa en cámara', sonido:'Música o efecto', visual:'Qué se ve en la imagen', nota:'Nota para ti',
+  texto: t === 'video' ? 'Texto que aparece en pantalla' : 'Texto que va en la imagen'
+}[k] || '');
+const sectionWord = t => t === 'carrusel' ? 'Diapositiva' : 'Sección';
+const encodePath = p => p.split('/').map(encodeURIComponent).join('/');
+const host = u => { try { const x = new URL(u); return x.hostname.replace(/^www\./, '') + (x.pathname.length > 1 ? x.pathname : ''); } catch (err) { return u; } };
+const slug = s => (s || 'pieza').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'pieza';
+const fmtNum = n => n.toLocaleString('es-CO');
+const startOfToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
+const daysUntil = k => Math.round((parseKey(k) - startOfToday()) / 86400000);
+const isDone = p => p.status === 'programada' || p.status === 'publicada';
+const isThisWeek = p => !!p.date && !isDone(p) && daysUntil(p.date) <= 7;
+function rel(ts){
+  const min = Math.floor((Date.now() - ts) / 60000);
+  if (min < 1) return 'ahora';
+  if (min < 60) return `hace ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `hace ${h} h`;
+  const d = Math.floor(h / 24);
+  if (d === 1) return 'ayer';
+  if (d < 7) return `hace ${d} días`;
+  const t = new Date(ts); return `el ${t.getDate()} ${MONTHS_SHORT[t.getMonth()]}`;
+}
+const ago = ts => `Editado ${rel(ts)}`;
+function agoShort(ts){
+  const min = Math.floor((Date.now() - ts) / 60000);
+  if (min < 1) return 'ahora';
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h} h`;
+  const d = Math.floor(h / 24);
+  if (d === 1) return 'ayer';
+  if (d < 7) return `${d} d`;
+  const t = new Date(ts); return `${t.getDate()} ${MONTHS_SHORT[t.getMonth()]}`;
+}
+function dueText(p){
+  if (!p.date) return 'Sin fecha';
+  if (isDone(p)) return shortDate(p.date);
+  const d = daysUntil(p.date);
+  if (d < 0) return `Atrasada ${-d} ${d === -1 ? 'día' : 'días'}`;
+  if (d === 0) return 'Hoy';
+  if (d === 1) return 'Mañana';
+  if (d <= 7) return `Faltan ${d} días`;
+  return shortDate(p.date);
+}
+const dueClass = p => !p.date ? 'none' : (!isDone(p) && daysUntil(p.date) <= 1 ? 'urgent' : '');
+
+function toB64(str){
+  const bytes = new TextEncoder().encode(str);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+function fromB64(b64){
+  const bin = atob(b64.replace(/\s/g, ''));
+  return new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0)));
+}
+function blobToDataURL(blob){
+  return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(r.error || new Error('no se pudo leer el archivo')); r.readAsDataURL(blob); });
+}
+async function toDataURL(src){
+  if (src.startsWith('data:')) return src;
+  return blobToDataURL(await (await fetch(src)).blob());
+}
+function download(name, text, mime){
+  const url = URL.createObjectURL(new Blob([text], {type: mime + ';charset=utf-8'}));
+  const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+/* ===== Estado ===== */
+const emptyData = () => ({version:1, brands:[{id:uid(), name:'Koru Studio', emoji:''}], pieces:[], prompts:[], notes:[]});
+let data = emptyData();
+const today = new Date();
+const ui = {taskForm:null, space:'planner', prompt:null, promptView:'edit', note:null, bankFilter:{type:'all', value:null}, bankQuery:'', capKind:'idea', capTopic:'', capDraft:'', brand:'all', piece:null, view:'list', back:'list', focus:false, listCollapsed:{}, month:new Date(today.getFullYear(), today.getMonth(), 1), collapsed:{}, connectOpen:false, connectError:''};
+const store = {mode:'local', cfg:null, sha:null, rev:0, savedRev:0, saving:false, again:false, loaded:false, state:'idle', errorMsg:'', lastSaved:null, timer:null, retry:null, pendingDeletes:[]};
+const imgCache = new Map();
+const isDirty = () => store.rev !== store.savedRev;
+const curPiece = () => data.pieces.find(p => p.id === ui.piece) || null;
+const brandOf = p => data.brands.find(b => b.id === p.brandId) || data.brands[0];
+const visiblePieces = () => ui.brand === 'all' ? data.pieces : data.pieces.filter(p => p.brandId === ui.brand);
+const sortPieces = ps => ps.slice().sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999') || a.title.localeCompare(b.title));
+
+function normalize(d){
+  if (!d || typeof d !== 'object' || !Array.isArray(d.pieces)) throw new Error('el archivo no tiene el formato de guiones');
+  const brands = Array.isArray(d.brands) && d.brands.length
+    ? d.brands.map(b => ({id:String(b.id || uid()), name:String(b.name || 'Sin nombre'), emoji:String(b.emoji || '')}))
+    : [{id:uid(), name:'Koru Studio', emoji:''}];
+  const ids = new Set(brands.map(b => b.id));
+  const pieces = d.pieces.map(p => {
+    const type = TYPES.some(t => t[0] === p.type) ? p.type : 'video';
+    const kinds = kindsFor(type).map(k => k[0]);
+    return {
+      id:String(p.id || uid()),
+      brandId:ids.has(p.brandId) ? p.brandId : brands[0].id,
+      title:String(p.title || ''),
+      type,
+      status:STATES.some(s => s[0] === p.status) ? p.status : 'idea',
+      date:/^\d{4}-\d{2}-\d{2}$/.test(p.date || '') ? p.date : null,
+      sections:(Array.isArray(p.sections) ? p.sections : []).map(s => ({
+        id:String(s.id || uid()), title:String(s.title || ''),
+        blocks:(Array.isArray(s.blocks) ? s.blocks : []).map(b => ({id:String(b.id || uid()), kind:kinds.includes(b.kind) ? b.kind : 'nota', text:String(b.text || '')}))
+      })),
+      caption:String(p.caption || ''),
+      hashtags:String(p.hashtags || ''),
+      links:(Array.isArray(p.links) ? p.links : []).filter(l => l && l.url).map(l => ({id:String(l.id || uid()), url:String(l.url), note:String(l.note || '')})),
+      images:(Array.isArray(p.images) ? p.images : []).filter(i => i && (i.path || i.data)).map(i => {
+        const im = {id:String(i.id || uid()), name:String(i.name || 'imagen.jpg'), w:i.w | 0, h:i.h | 0};
+        if (i.path) im.path = String(i.path); else im.data = String(i.data);
+        return im;
+      }),
+      updated:p.updated || Date.now()
+    };
+  });
+  const prompts = (Array.isArray(d.prompts) ? d.prompts : []).map(x => {
+    const parts = {}, on = {};
+    for (const [k] of PROMPT_PARTS){
+      parts[k] = String(x.parts?.[k] || '');
+      on[k] = x.on && k in x.on ? !!x.on[k] : (k === 'contexto' || k === 'pedido');
+    }
+    on.pedido = true;
+    return {id:String(x.id || uid()), title:String(x.title || ''), isTemplate:!!x.isTemplate, parts, on, updated:x.updated || Date.now(), lastCopied:x.lastCopied || null};
+  });
+  const notes = (Array.isArray(d.notes) ? d.notes : []).map(n => ({
+    id:String(n.id || uid()), title:String(n.title || ''), text:String(n.text || ''),
+    kind:NOTE_KINDS.some(k => k[0] === n.kind) ? n.kind : 'idea',
+    topic:String(n.topic || '').trim(), brandId:n.brandId && ids.has(n.brandId) ? n.brandId : null,
+    source:String(n.source || ''), archived:!!n.archived, created:n.created || Date.now(), updated:n.updated || Date.now()
+  })).filter(n => n.title || n.text);
+  return {version:1, brands, pieces, prompts, notes};
+}
+
+function applyData(d){
+  data = normalize(d);
+  for (const v of imgCache.values()) if (v.startsWith('blob:')) URL.revokeObjectURL(v);
+  imgCache.clear();
+  ui.brand = 'all'; ui.back = 'list'; ui.focus = false;
+  ui.piece = null; ui.view = 'list'; ui.prompt = null; ui.promptView = 'edit'; ui.note = null; ui.bankFilter = {type:'all', value:null};
+  const cands = [...data.pieces.map(x => ['planner', x, 'piece']), ...data.prompts.map(x => ['textos', x, 'prompt']), ...data.notes.map(x => ['textos', x, 'note'])];
+  const last = cands.reduce((a, c) => (!a || c[1].updated > a[1].updated) ? c : a, null);
+  if (!koruHub()) ui.space = last ? last[0] : 'planner';
+  if (last && last[2] === 'piece'){ ui.piece = last[1].id; ui.view = 'script'; }
+  if (last && last[2] === 'prompt') ui.prompt = last[1].id;
+}
+
+function defaultSections(type){
+  const blk = kind => ({id:uid(), kind, text:''});
+  if (type === 'carrusel') return ['Portada','Diapositiva 2','Cierre'].map(t => ({id:uid(), title:t, blocks:[blk('texto'), blk('visual')]}));
+  if (type === 'post') return [{id:uid(), title:'Imagen', blocks:[blk('texto'), blk('visual')]}];
+  return ['Gancho','Desarrollo','Cierre'].map(t => ({id:uid(), title:t, blocks:[blk('voz')]}));
+}
+
+function markDirty(){
+  store.rev++;
+  renderStorage();
+  if (store.mode === 'github') scheduleSave();
+}
+function touch(p){ if (p) p.updated = Date.now(); markDirty(); }
+
+/* ===== Elementos ===== */
+const shell = $('.shell'), spacesEl = $('#spaces'), primaryBtn = $('#primaryBtn');
+let lastView = null, lastPiece = null;
+const tree = $('#tree'), head = $('#head'), body = $('#body'), right = $('#right'), storageEl = $('#storage');
+const toastEl = $('#toast'), lightbox = $('#lightbox'), fileInput = $('#fileInput'), imgInput = $('#imgInput');
+
+let toastTimer = null;
+function toast(msg){
+  toastEl.textContent = msg; toastEl.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { toastEl.hidden = true; }, 4500);
+}
+
+/* ===== Render ===== */
+function render(){ renderSpaces(); renderTree(); renderCenter(); renderRight(); renderStorage(); }
+function renderSpaces(){
+  spacesEl.innerHTML = SPACES.filter(([k]) => k !== 'tareas' || koruHub()).map(([k, l]) => `<button class="seg-btn ${ui.space === k ? 'active' : ''}" data-space="${k}" role="tab" aria-selected="${ui.space === k}">${l}</button>`).join('');
+  primaryBtn.innerHTML = `<span class="plus">+</span> ${ui.space === 'planner' ? 'Nueva pieza' : 'Nuevo prompt'}`;
+}
+
+const avatar = b => `<span class="avatar">${esc(b.emoji || (b.name.trim()[0] || '?').toUpperCase())}</span>`;
+
+function renderTree(){
+  if (ui.space === 'textos') tree.innerHTML = bankNavHTML();
+  else renderBrandTree();
+}
+function renderBrandTree(){
+  let h = `<div class="tree-row ${ui.brand === 'all' ? 'active' : ''}"><span class="caret-space"></span><button class="tree-main" data-brand="all"><span class="avatar all">✱</span><span class="name">Todas las marcas</span><span class="count">${data.pieces.length}</span></button></div>`;
+  for (const b of data.brands){
+    const ps = sortPieces(data.pieces.filter(p => p.brandId === b.id));
+    const col = !!ui.collapsed[b.id];
+    h += `<div class="tree-brand"><div class="tree-row ${ui.brand === b.id ? 'active' : ''}">
+      <button class="caret ${col ? '' : 'open'}" data-toggle="${b.id}" title="${col ? 'Mostrar' : 'Ocultar'} piezas" aria-expanded="${!col}">▶</button>
+      <button class="tree-main" data-brand="${b.id}">${avatar(b)}<span class="name">${esc(b.name)}</span><span class="count">${ps.length}</span></button></div>`;
+    if (!col){
+      h += `<div class="tree-pieces">` + (ps.length ? ps.map(p => `<button class="tree-piece ${ui.piece === p.id ? 'sel' : ''}" data-piece="${p.id}">
+        <span class="sdot s-${p.status}" title="${stateLabel(p.status)}"></span><span class="tglyph">${typeInfo(p.type)[2]}</span>
+        <span class="pname">${esc(p.title || 'Sin título')}</span><span class="pdate">${shortDate(p.date)}</span></button>`).join('')
+        : `<p class="tree-empty">Sin piezas todavía</p>`) + `</div>`;
+    }
+    h += `</div>`;
+  }
+  h += `<button class="link-btn new-brand" id="newBrandBtn">+ Nueva marca</button>`;
+  tree.innerHTML = h;
+}
+
+function segHTML(){
+  return `<div class="seg" role="tablist" aria-label="Vista">
+    <button class="seg-btn ${ui.view === 'list' ? 'active' : ''}" data-view="list" role="tab" aria-selected="${ui.view === 'list'}">Guiones</button>
+    <button class="seg-btn ${ui.view === 'cal' ? 'active' : ''}" data-view="cal" role="tab" aria-selected="${ui.view === 'cal'}">Calendario</button></div>`;
+}
+
+function renderCenter(){
+  if (ui.space !== 'planner'){
+    const key = ui.space + ':' + (curPrompt() ? 'p' + ui.prompt + ui.promptView : (ui.note || 'list:' + ui.bankFilter.type + ui.bankFilter.value));
+    shell.classList.toggle('focus', ui.focus && isEditorView());
+    const st = body.scrollTop, same = key === lastView;
+    if (curPrompt()) renderPromptCenter(); else renderBankCenter();
+    body.scrollTop = same ? st : 0; lastView = key;
+    return;
+  }
+  const p = curPiece();
+  if (ui.view === 'script' && !p){ ui.view = ui.back || 'list'; ui.focus = false; }
+  shell.classList.toggle('focus', ui.focus && ui.view === 'script');
+  const st = body.scrollTop, same = ui.view === lastView && (ui.view !== 'script' || ui.piece === lastPiece);
+  if (ui.view === 'list'){
+    head.innerHTML = `<h1 class="month">Guiones</h1>${segHTML()}`;
+    body.innerHTML = listHTML();
+  } else if (ui.view === 'cal'){
+    head.innerHTML = `<h1 class="month">${cap(MONTHS[ui.month.getMonth()])} ${ui.month.getFullYear()}</h1>
+      <div class="head-nav"><button class="ib" data-nav="-1" title="Mes anterior">‹</button><button class="b sm" data-nav="0">Hoy</button><button class="ib" data-nav="1" title="Mes siguiente">›</button></div>${segHTML()}`;
+    body.innerHTML = calendarHTML();
+  } else {
+    const b = brandOf(p);
+    head.innerHTML = `<button class="b sm back" data-back>‹ ${ui.back === 'cal' ? 'Calendario' : 'Guiones'}</button>
+      <div class="crumb">${ui.focus ? '' : avatar(b) + `<span>${esc(b.name)}</span>`}</div>
+      <button class="b sm" data-focus title="Ctrl + . también lo activa y lo quita">${ui.focus ? 'Salir del modo escritura' : 'Modo escritura'}</button>`;
+    body.innerHTML = editorHTML(p);
+    body.querySelectorAll('textarea').forEach(autosize);
+  }
+  body.scrollTop = same ? st : 0;
+  lastView = ui.view; lastPiece = ui.piece;
+}
+
+function listHTML(){
+  const vis = visiblePieces();
+  const week = vis.filter(isThisWeek).sort((a, b) => a.date.localeCompare(b.date));
+  const rest = vis.filter(p => !isThisWeek(p));
+  const order = [['produccion','Producción'],['guion','Guion'],['idea','Ideas'],['programada','Programada'],['publicada','Publicada']];
+  let h = `<div class="list">`;
+  if (week.length) h += groupHTML('week', 'Para esta semana', week, 'Se publican en los próximos siete días y todavía no están programadas.');
+  for (const [st, label] of order){
+    const ps = sortList(rest.filter(p => p.status === st));
+    if (!ps.length && st !== 'idea') continue;
+    h += groupHTML(st, label, ps, st === 'idea' && !vis.length ? 'Todavía no hay guiones. Escribe tu primera idea aquí abajo, o pulsa «Nueva pieza» para empezar un guion completo.' : '');
+  }
+  return h + `</div>`;
+}
+const sortList = ps => ps.slice().sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999') || b.updated - a.updated);
+
+function groupHTML(key, label, ps, help){
+  const col = key in ui.listCollapsed ? ui.listCollapsed[key] : key === 'publicada';
+  const showBrand = ui.brand === 'all' && data.brands.length > 1;
+  const rows = ps.map(p => `<button class="lrow" data-open="${p.id}">
+      <span class="sdot s-${p.status}" title="${stateLabel(p.status)}"></span><span class="tglyph" title="${typeInfo(p.type)[1]}">${typeInfo(p.type)[2]}</span>
+      ${showBrand ? `<span class="avatar xs" title="${esc(brandOf(p).name)}">${esc(brandOf(p).emoji || (brandOf(p).name.trim()[0] || '?').toUpperCase())}</span>` : ''}
+      <span class="lname">${esc(p.title || 'Sin título')}</span>
+      ${rowTasks(p)}<span class="ledited">${ago(p.updated)}</span>
+      <span class="ldate ${dueClass(p)}">${dueText(p)}</span></button>`).join('');
+  const capture = key === 'idea' ? `<label class="capture"><span class="plus">+</span><input class="capture-input" id="captureInput" placeholder="Escribe una idea y pulsa Enter" aria-label="Nueva idea" autocomplete="off"></label>` : '';
+  return `<section class="lgroup ${key === 'week' ? 'week' : ''}">
+    <button class="lgroup-head" data-lgroup="${key}" aria-expanded="${!col}"><span class="caret ${col ? '' : 'open'}">▶</span><span class="lgroup-title">${label}</span><span class="count">${ps.length}</span></button>
+    ${col ? '' : `${help ? `<p class="lgroup-help">${help}</p>` : ''}<div class="lrows">${rows}${capture}</div>`}
+  </section>`;
+}
+
+function chipHTML(p){
+  return `<div class="pchip ${ui.piece === p.id ? 'sel' : ''}" data-piece="${p.id}" tabindex="0" role="button" title="${esc((p.title || 'Sin título') + ', ' + typeInfo(p.type)[1].toLowerCase() + ', ' + stateLabel(p.status).toLowerCase())}">
+    <span class="sdot s-${p.status}"></span><span class="pname"><span class="tg">${typeInfo(p.type)[2]}</span>${esc(p.title || 'Sin título')}</span></div>`;
+}
+
+function calendarHTML(){
+  const y = ui.month.getFullYear(), m = ui.month.getMonth();
+  const off = (new Date(y, m, 1).getDay() + 6) % 7;
+  const dim = new Date(y, m + 1, 0).getDate();
+  const rows = Math.ceil((off + dim) / 7);
+  const todayKey = dkey(new Date());
+  const vis = visiblePieces();
+  const byDate = {};
+  for (const p of sortPieces(vis)) if (p.date) (byDate[p.date] = byDate[p.date] || []).push(p);
+  let cells = '';
+  for (let i = 0; i < rows * 7; i++){
+    const d = new Date(y, m, 1 - off + i), k = dkey(d);
+    cells += `<div class="day ${d.getMonth() !== m ? 'out' : ''} ${k === todayKey ? 'today' : ''}" data-date="${k}">
+      <div class="day-head"><span class="dnum">${d.getDate()}</span><button class="ib add-day" data-add="${k}" title="Nueva pieza el ${longDate(k)}">+</button></div>
+      <div class="day-items">${(byDate[k] || []).map(chipHTML).join('')}</div></div>`;
+  }
+  const undated = sortPieces(vis.filter(p => !p.date));
+  return `<div class="cal">
+    <div class="cal-dow">${DOW.map(d => `<span>${cap(d)}</span>`).join('')}</div>
+    <div class="cal-grid" style="grid-template-rows:repeat(${rows},minmax(var(--day-min-height),1fr))">${cells}</div>
+    <div class="undated" data-date="">
+      <div class="undated-head">Sin fecha <span class="count">${undated.length}</span></div>
+      <div class="undated-items">${undated.length ? undated.map(chipHTML).join('') : `<p class="hint">Las piezas sin fecha esperan aquí. Arrástralas a un día para programarlas, o trae aquí las que quieras sacar del calendario.</p>`}</div>
+    </div></div>`;
+}
+
+function editorHTML(p){
+  const t = typeInfo(p.type);
+  let h = `<div class="editor">
+    <input class="title-input" id="titleInput" value="${esc(p.title)}" placeholder="Título de la pieza" aria-label="Título de la pieza" autocomplete="off">
+    <div class="meta">
+      <span class="tag">${t[2]} ${t[1]}</span>
+      <span class="tag"><span class="sdot s-${p.status}"></span>${stateLabel(p.status)}</span>
+      <span class="tag">${p.date ? cap(longDate(p.date)) : 'Sin fecha'}</span>
+      ${p.type === 'video' ? `<span class="tag" id="metaDur">${durOf(totalVoiceWords(p))} de voz en off</span>` : ''}
+    </div>`;
+  p.sections.forEach((s, i) => { h += secHTML(p, s, i); });
+  h += `<button class="add-sec" id="addSection">+ Añadir ${p.type === 'carrusel' ? 'diapositiva' : 'sección'}</button>
+    <section class="sec caption-card">
+      <div class="sec-head"><h3 class="cap-title">Texto de la publicación</h3><span class="sec-dur" id="capCount">${fmtNum(p.caption.length)} / ${fmtNum(CAPTION_LIMIT)}</span></div>
+      <textarea id="captionInput" rows="3" placeholder="El copy que acompaña la publicación" aria-label="Texto de la publicación">${esc(p.caption)}</textarea>
+      <input class="field" id="hashtagsInput" value="${esc(p.hashtags)}" placeholder="#hashtags" aria-label="Hashtags" autocomplete="off">
+    </section>
+    <p class="help">Escribe ${p.type === 'video' ? '(vo), (acc), (txt), (son)' : '(txt), (vis)'} o (nota) al inicio de una línea para cambiar su tipo, o pulsa la etiqueta de la izquierda. Enter crea una línea nueva, Mayús + Enter salta de renglón dentro de la misma y Alt + ↑ ↓ la mueve.</p>
+  </div>`;
+  return h;
+}
+
+function secHTML(p, s, i){
+  const last = p.sections.length - 1;
+  return `<section class="sec" data-sec="${s.id}">
+    <header class="sec-head">
+      <span class="sec-num">${i + 1}</span>
+      <input class="sec-title" value="${esc(s.title)}" placeholder="${sectionWord(p.type)} ${i + 1}" aria-label="Nombre de la ${sectionWord(p.type).toLowerCase()}" autocomplete="off">
+      ${p.type === 'video' ? `<span class="sec-dur">${durOf(voiceWords(s))}</span>` : ''}
+      <div class="sec-tools">
+        <button class="ib" data-sec-move="-1" title="Subir" ${i === 0 ? 'disabled' : ''}>↑</button>
+        <button class="ib" data-sec-move="1" title="Bajar" ${i === last ? 'disabled' : ''}>↓</button>
+        <button class="ib danger" data-sec-del title="Eliminar ${sectionWord(p.type).toLowerCase()}">×</button>
+      </div>
+    </header>
+    <div class="blocks">${s.blocks.map(b => blkHTML(p, b)).join('')}</div>
+    <div class="add-row">${kindsFor(p.type).map(k => `<button class="add-kind" data-add-kind="${k[0]}">+ ${k[1]}</button>`).join('')}</div>
+  </section>`;
+}
+
+function blkHTML(p, b){
+  const label = kindLabel(p.type, b.kind);
+  return `<div class="blk k-${b.kind}" data-blk="${b.id}">
+    <button class="kind" title="Cambiar tipo de línea">${label}</button>
+    <textarea rows="1" placeholder="${placeholderFor(p.type, b.kind)}" aria-label="${label}">${esc(b.text)}</textarea>
+    <div class="blk-tools">
+      <button class="ib" data-blk-move="-1" title="Subir línea">↑</button>
+      <button class="ib" data-blk-move="1" title="Bajar línea">↓</button>
+      <button class="ib" data-blk-bank title="Guardar esta línea en el Banco">✦</button>
+      <button class="ib danger" data-blk-del title="Quitar línea">×</button>
+    </div></div>`;
+}
+
+function summaryText(p){
+  if (p.type === 'video'){
+    const w = totalVoiceWords(p);
+    return `<strong>${durOf(w)}</strong> de voz en off<br>${fmtNum(w)} palabras en ${p.sections.length} ${p.sections.length === 1 ? 'sección' : 'secciones'}`;
+  }
+  const textChars = p.sections.reduce((a, s) => a + s.blocks.filter(b => b.kind === 'texto').reduce((x, b) => x + b.text.trim().length, 0), 0);
+  if (p.type === 'carrusel') return `<strong>${p.sections.length}</strong> ${p.sections.length === 1 ? 'diapositiva' : 'diapositivas'}<br>${fmtNum(textChars)} caracteres de texto en imagen`;
+  return `<strong>${fmtNum(textChars)}</strong> caracteres de texto en la imagen<br>${fmtNum(p.caption.length)} caracteres de copy`;
+}
+
+function renderRight(){
+  if (ui.space === 'textos'){ right.innerHTML = curPrompt() ? promptRightHTML(curPrompt()) : bankRightHTML(); return; }
+  const p = curPiece();
+  right.innerHTML = p ? pieceHTML(p) : overviewHTML();
+  if (p) hydrateImages(right);
+}
+
+function pieceHTML(p){
+  const thumbs = p.images.map(im => `<div class="thumb ${imgCache.has(im.id) || im.data ? '' : 'loading'}"><img data-img-id="${im.id}" alt="${esc(im.name)}"><button class="ib thumb-del" data-del-img="${im.id}" title="Quitar imagen">×</button></div>`).join('');
+  const links = p.links.map(l => `<div class="link-row"><div class="link-main">
+      <a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer" title="${esc(l.url)}">${esc(host(l.url))}</a>
+      <input class="field sm" data-link-note="${l.id}" value="${esc(l.note)}" placeholder="Para qué es (opcional)" aria-label="Nota del enlace" autocomplete="off">
+    </div><button class="ib danger" data-del-link="${l.id}" title="Quitar enlace">×</button></div>`).join('');
+  return `
+  <div class="group">
+    <p class="piece-name">${esc(p.title || 'Sin título')}</p>
+    ${ui.view === 'cal' ? `<button class="b wide" id="openScript">Abrir guion</button>` : ''}
+  </div>
+  <div class="group"><h2>Formato</h2>
+    <div class="chips">${TYPES.map(t => `<button class="chip ${p.type === t[0] ? 'active' : ''}" data-set-type="${t[0]}" aria-pressed="${p.type === t[0]}">${t[2]} ${t[1]}</button>`).join('')}</div>
+    <p class="help">${TYPE_HELP[p.type]}</p></div>
+  <div class="group"><h2>Estado</h2>
+    <div class="chips">${STATES.map(s => `<button class="chip ${p.status === s[0] ? 'active' : ''}" data-set-status="${s[0]}" aria-pressed="${p.status === s[0]}"><span class="sdot s-${s[0]}"></span>${s[1]}</button>`).join('')}</div></div>
+  ${tasksHTML(p)}
+  <div class="group"><h2>Fecha de publicación</h2>
+    <div class="row"><input type="date" class="field" id="dateInput" value="${p.date || ''}" aria-label="Fecha de publicación">${p.date ? `<button class="link-btn" id="clearDate">Quitar</button>` : ''}</div></div>
+  <div class="group"><h2>Marca</h2>
+    <select class="field" id="brandSelect" aria-label="Marca">${data.brands.map(b => `<option value="${b.id}" ${b.id === p.brandId ? 'selected' : ''}>${esc((b.emoji ? b.emoji + ' ' : '') + b.name)}</option>`).join('')}</select></div>
+  <div class="group"><h2>Resumen</h2>
+    <div class="sunken" id="pieceSummary">${summaryText(p)}</div>
+    ${p.type === 'video' ? `<p class="help">Calculado a 2,5 palabras por segundo, un ritmo de voz natural en español.</p>` : ''}</div>
+  ${frasesHTML(p)}
+  <div class="group"><h2>Material</h2>
+    <p class="subhead">Enlaces</p>
+    <div class="links">${links}</div>
+    <input class="field" id="linkInput" placeholder="Pega un enlace y pulsa Enter" aria-label="Añadir enlace" autocomplete="off">
+    <p class="subhead">Imágenes</p>
+    <div class="dropzone" id="imgDrop" role="button" tabindex="0">Arrastra imágenes aquí<span>o haz clic para elegirlas. También puedes pegarlas con Ctrl + V.</span></div>
+    ${thumbs ? `<div class="thumbs">${thumbs}</div>` : ''}
+  </div>
+  <div class="group action">
+    <button class="b go deliver wide" id="exportMd"><span>↓</span> Descargar guion</button>
+    ${p.type === 'video' ? `<button class="link-btn" id="exportTxt">Solo voz en off, para teleprompter</button>` : ''}
+    <button class="link-btn danger" id="deletePiece">Eliminar pieza</button>
+  </div>`;
+}
+
+function brandEditHTML(b){
+  const brandPieces = data.pieces.filter(p => p.brandId === b.id).length;
+  return `<div class="group"><h2>Marca</h2>
+    <div class="brand-edit"><input class="field emoji-field" id="brandEmoji" value="${esc(b.emoji)}" placeholder="${esc((b.name.trim()[0] || '?').toUpperCase())}" maxlength="4" aria-label="Emoji de la marca" autocomplete="off"><input class="field" id="brandName" value="${esc(b.name)}" aria-label="Nombre de la marca" autocomplete="off"></div>
+    <p class="help">Pega un emoji para identificarla en la lista.</p>
+    ${brandPieces || data.brands.length < 2 ? `<p class="help">${data.brands.length < 2 ? 'Es la única marca: no se puede eliminar.' : 'Para eliminarla, primero mueve o elimina sus piezas.'}</p>` : `<button class="link-btn danger" id="deleteBrand">Eliminar marca</button>`}
+  </div>`;
+}
+
+function overviewHTML(){
+  const b = ui.brand !== 'all' ? data.brands.find(x => x.id === ui.brand) : null;
+  if (ui.view === 'list'){
+    const vis = visiblePieces();
+    const week = vis.filter(isThisWeek).length, undated = vis.filter(p => !p.date).length;
+    return `
+    <div class="group"><h2>Todas las piezas${b ? `, ${esc(b.name)}` : ''}</h2>
+      <div class="sunken stats">
+        ${STATES.map(s => `<div class="stat"><span class="sdot s-${s[0]}"></span><span>${s[1]}</span><b>${vis.filter(p => p.status === s[0]).length}</b></div>`).join('')}
+      </div>
+      <p class="help">${week} para esta semana. ${undated} sin fecha.</p></div>
+    ${b ? brandEditHTML(b) : ''}
+    <div class="group"><h2>Cómo se usa</h2>
+      <p class="help" style="margin:0">Escribe en la última línea de Ideas y pulsa Enter para guardar una idea sin abrirla. Un clic abre el guion. La fecha es opcional: puedes escribir hoy algo que se publica en un mes, y aparecerá en «Para esta semana» cuando se acerque.</p></div>
+    <div class="group action">
+      <button class="b go deliver wide" id="exportList" ${vis.length ? '' : 'disabled'}><span>↓</span> Descargar lista de guiones</button>
+    </div>`;
+  }
+  const y = ui.month.getFullYear(), m = ui.month.getMonth();
+  const prefix = `${y}-${pad(m + 1)}`;
+  const vis = visiblePieces();
+  const inMonth = vis.filter(p => p.date && p.date.startsWith(prefix));
+  const undated = vis.filter(p => !p.date).length;
+  return `
+  <div class="group"><h2>${cap(MONTHS[m])}${b ? `, ${esc(b.name)}` : ''}</h2>
+    <div class="sunken stats">
+      ${STATES.map(s => `<div class="stat"><span class="sdot s-${s[0]}"></span><span>${s[1]}</span><b>${inMonth.filter(p => p.status === s[0]).length}</b></div>`).join('')}
+    </div>
+    <p class="help">${inMonth.length} ${inMonth.length === 1 ? 'pieza programada' : 'piezas programadas'} este mes. ${undated} sin fecha.</p></div>
+  ${b ? brandEditHTML(b) : ''}
+  <div class="group"><h2>Cómo se usa</h2>
+    <p class="help" style="margin:0">Pulsa + en un día para crear una pieza en esa fecha. Arrastra las piezas entre días, o a «Sin fecha» para sacarlas del calendario. Un clic selecciona la pieza; doble clic abre su guion.</p></div>
+  <div class="group action">
+    <button class="b go deliver wide" id="exportPlan" ${inMonth.length + undated ? '' : 'disabled'}><span>↓</span> Descargar plan del mes</button>
+  </div>`;
+}
+
+function renderStorage(){
+  let dot = 'ok', title, status, statusBad = false, btns;
+  if (store.mode === 'local'){
+    title = 'En este navegador';
+    if (isDirty()){ dot = 'warn'; status = 'Tienes cambios que solo existen en esta pestaña. Descarga una copia o guarda en GitHub para no perderlos.'; }
+    else if (store.lastSaved){ status = `Copia descargada a las ${hhmm(store.lastSaved)}.`; }
+    else { dot = ''; status = 'Abre tu archivo de guiones, arrástralo aquí, o empieza a escribir.'; }
+    btns = `<div class="store-btns"><button class="b sm" id="saveCopy">Descargar copia</button><button class="b sm" id="openFile">Abrir archivo</button></div>
+      <button class="link-btn" id="toggleConnect">${ui.connectOpen ? 'Cancelar' : 'Guardar en GitHub'}</button>
+      ${ui.connectOpen ? connectFormHTML() : ''}`;
+  } else {
+    title = 'Guardado en GitHub';
+    const extra = [];
+    switch (store.state){
+      case 'loading': dot = 'warn'; status = 'Trayendo tus guiones…'; break;
+      case 'saving': dot = 'warn'; status = 'Guardando…'; break;
+      case 'offline': dot = 'warn'; status = 'Sin conexión. Guardo en cuanto vuelva la red.'; break;
+      case 'conflict': dot = 'bad'; statusBad = true; status = 'Los guiones cambiaron en GitHub desde otro navegador. Trae esa versión para seguir; los cambios de esta pestaña se pierden.'; extra.push(`<button class="b sm" id="pullRemote">Traer versión de GitHub</button>`); break;
+      case 'error': dot = 'bad'; statusBad = true; status = store.errorMsg; extra.push(`<button class="b sm" id="retry">Reintentar</button>`); break;
+      default: if (isDirty()){ dot = 'warn'; status = 'Cambios pendientes…'; } else status = store.lastSaved ? `Guardado a las ${hhmm(store.lastSaved)}.` : 'Al día con GitHub.';
+    }
+    btns = `<div class="store-btns">${extra.join('')}<button class="b sm" id="saveCopy">Descargar copia</button></div><button class="link-btn" id="disconnect">Desconectar</button>`;
+  }
+  storageEl.innerHTML = `<div class="store-card">
+    <div class="store-head"><span class="store-dot ${dot}"></span>${title}</div>
+    ${store.mode === 'github' && store.cfg ? `<p class="store-repo">${esc(store.cfg.owner)}/${esc(store.cfg.repo)}</p>` : ''}
+    <p class="store-status ${statusBad ? 'bad' : ''}">${esc(status)}</p>${btns}</div>`;
+}
+
+function connectFormHTML(){
+  return `<div class="connect-form">
+    <label class="flabel">Usuario<input class="field" id="ghOwner" value="KoruStudio" autocomplete="off"></label>
+    <label class="flabel">Repositorio privado<input class="field" id="ghRepo" value="koru-datos" autocomplete="off"></label>
+    <label class="flabel">Llave de acceso<input class="field" id="ghToken" type="password" placeholder="github_pat_…" autocomplete="off"></label>
+    <p class="help" style="margin:0">Sirve la misma llave del seguimiento de tareas, porque ya tiene permiso sobre koru-datos. Los guiones se guardan en ${FILE}, aparte de tus tareas.</p>
+    ${ui.connectError ? `<p class="store-status bad" style="margin:0">${esc(ui.connectError)}</p>` : ''}
+    <button class="b go wide" id="connectBtn">Conectar</button></div>`;
+}
+
+/* ===== Acciones de pieza ===== */
+function newPiece(date){
+  const brandId = ui.brand !== 'all' ? ui.brand : data.brands[0].id;
+  const p = {id:uid(), brandId, title:'', type:'video', status:'idea', date:date || null, sections:defaultSections('video'), caption:'', hashtags:'', links:[], images:[], updated:Date.now()};
+  data.pieces.push(p);
+  if (ui.view !== 'script') ui.back = ui.view;
+  ui.piece = p.id; ui.view = 'script'; ui.collapsed[brandId] = false;
+  touch(p); render();
+  $('#titleInput')?.focus();
+}
+
+function openPiece(id){
+  if (ui.view !== 'script') ui.back = ui.view;
+  ui.taskForm = null;
+  const p = data.pieces.find(x => x.id === id); if (!p) return;
+  if (ui.brand !== 'all' && p.brandId !== ui.brand) ui.brand = p.brandId;
+  ui.piece = id; ui.view = 'script'; ui.collapsed[p.brandId] = false;
+  render();
+}
+function goBack(){
+  ui.view = ui.back || 'list'; ui.focus = false;
+  if (ui.view === 'list') ui.piece = null;
+  else { const p = curPiece(); if (p && p.date){ const d = parseKey(p.date); ui.month = new Date(d.getFullYear(), d.getMonth(), 1); } }
+  render();
+}
+function toggleFocus(){
+  if (!isEditorView()) return;
+  ui.focus = !ui.focus;
+  const ae = document.activeElement, pos = ae && 'selectionStart' in ae ? ae.selectionStart : null;
+  const blk = ae?.closest?.('[data-blk]')?.dataset.blk, aid = ae && body.contains(ae) ? ae.id : '';
+  renderCenter(); renderRight();
+  if (blk) focusBlock(blk, pos);
+  else if (aid){ const el = document.getElementById(aid); if (el){ el.focus(); if (pos != null && el.setSelectionRange) el.setSelectionRange(pos, pos); } }
+}
+function selectChip(id){
+  /* Selección en el calendario sin redibujarlo, para que el doble clic llegue al mismo elemento */
+  ui.piece = id;
+  body.querySelectorAll('.pchip').forEach(c => c.classList.toggle('sel', c.dataset.piece === id));
+  renderTree(); renderRight();
+}
+function selectPiece(id, view){
+  ui.piece = id;
+  if (view) ui.view = view;
+  const p = curPiece();
+  if (p && ui.brand !== 'all' && p.brandId !== ui.brand) ui.brand = p.brandId;
+  render();
+}
+
+function setType(p, type){
+  if (p.type === type) return;
+  const map = type === 'video' ? TO_VIDEO : TO_STATIC;
+  const kinds = kindsFor(type).map(k => k[0]);
+  for (const s of p.sections) for (const b of s.blocks){
+    b.kind = map[b.kind] || b.kind;
+    if (!kinds.includes(b.kind)) b.kind = 'nota';
+  }
+  p.type = type;
+  touch(p); render();
+}
+
+function deletePiece(p){
+  if (!confirm(`¿Eliminar «${p.title || 'Sin título'}»? Se borra con su guion y su material, y no se puede deshacer.`)) return;
+  for (const im of p.images) if (im.path) store.pendingDeletes.push(im.path);
+  data.pieces = data.pieces.filter(x => x.id !== p.id);
+  ui.piece = null; ui.view = ui.back || 'list'; ui.focus = false;
+  markDirty(); render();
+}
+
+function autosize(t){ t.style.height = 'auto'; t.style.height = (t.scrollHeight + 2) + 'px'; }
+
+function focusBlock(id, pos){
+  const ta = body.querySelector(`[data-blk="${id}"] textarea`);
+  if (!ta) return;
+  ta.focus();
+  const n = pos === 'end' ? ta.value.length : (typeof pos === 'number' ? Math.min(pos, ta.value.length) : 0);
+  ta.setSelectionRange(n, n);
+}
+
+function updateLive(p){
+  if (p.type === 'video'){
+    body.querySelectorAll('[data-sec]').forEach(el => {
+      const s = p.sections.find(x => x.id === el.dataset.sec);
+      const d = el.querySelector('.sec-dur'); if (s && d) d.textContent = durOf(voiceWords(s));
+    });
+    const md = $('#metaDur'); if (md) md.textContent = `${durOf(totalVoiceWords(p))} de voz en off`;
+  }
+  const ps = $('#pieceSummary'); if (ps) ps.innerHTML = summaryText(p);
+}
+
+function moveBlock(p, si, bi, dir){
+  const s = p.sections[si], b = s.blocks[bi], j = bi + dir;
+  if (j >= 0 && j < s.blocks.length){ s.blocks.splice(bi, 1); s.blocks.splice(j, 0, b); }
+  else if (dir < 0 && si > 0){ s.blocks.splice(bi, 1); p.sections[si - 1].blocks.push(b); }
+  else if (dir > 0 && si < p.sections.length - 1){ s.blocks.splice(bi, 1); p.sections[si + 1].blocks.unshift(b); }
+  else return null;
+  touch(p);
+  return b.id;
+}
+
+function locate(p, el){
+  const secEl = el.closest('[data-sec]'); if (!secEl) return null;
+  const si = p.sections.findIndex(s => s.id === secEl.dataset.sec); if (si < 0) return null;
+  const row = el.closest('[data-blk]');
+  const bi = row ? p.sections[si].blocks.findIndex(b => b.id === row.dataset.blk) : -1;
+  return {si, s:p.sections[si], bi, b:bi >= 0 ? p.sections[si].blocks[bi] : null, row};
+}
+
+
+/* ===== Prompts y Banco ===== */
+const curPrompt = () => data.prompts.find(x => x.id === ui.prompt) || null;
+const curNote = () => data.notes.find(x => x.id === ui.note) || null;
+const isEditorView = () => ui.space === 'planner' ? ui.view === 'script' : !!(curPrompt() || curNote());
+const noteKind = k => NOTE_KINDS.find(x => x[0] === k) || NOTE_KINDS[1];
+const norm = s => String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const touchNote = n => { n.updated = Date.now(); markDirty(); };
+const touchPrompt = pr => { pr.updated = Date.now(); markDirty(); };
+
+function flash(btn, label, ms = 1500){
+  if (btn._flashing) return;
+  btn._flashing = true;
+  const prev = btn.innerHTML; btn.textContent = label;
+  setTimeout(() => { if (btn.isConnected) btn.innerHTML = prev; btn._flashing = false; }, ms);
+}
+
+async function copyText(text){
+  try {
+    if (navigator.clipboard && window.isSecureContext){ await navigator.clipboard.writeText(text); return true; }
+  } catch (err){ console.warn('El portapapeles directo no respondió, uso la vía alternativa:', err); }
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (err){ console.error('No se pudo copiar:', err); }
+  ta.remove();
+  return ok;
+}
+
+function topics(){
+  const m = new Map();
+  for (const n of data.notes) if (!n.archived && n.topic) m.set(n.topic, (m.get(n.topic) || 0) + 1);
+  return [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+}
+const topicDatalist = () => `<datalist id="topicList">${topics().map(([t]) => `<option value="${esc(t)}">`).join('')}</datalist>`;
+
+function splitCapture(raw){
+  const t = raw.replace(/\r/g, '').trim();
+  const nl = t.indexOf('\n');
+  let title = nl < 0 ? t : t.slice(0, nl).trim(), text = nl < 0 ? '' : t.slice(nl + 1).trim();
+  if (title.length > 100){ text = t; title = title.slice(0, 80).replace(/\s+\S*$/, '') + '…'; }
+  return {title, text};
+}
+function makeNote(raw, kind, topic, brandId, source){
+  const {title, text} = splitCapture(raw), now = Date.now();
+  return {id:uid(), title, text, kind, topic:(topic || '').trim(), brandId:brandId || null, source:source || '', archived:false, created:now, updated:now};
+}
+const fullNote = n => !n.text ? n.title : (n.title.endsWith('…') && n.text.startsWith(n.title.slice(0, -1).trim()) ? n.text : `${n.title}\n${n.text}`);
+
+/* --- Prompts --- */
+function assemble(pr){
+  const on = PROMPT_PARTS.filter(([k]) => pr.on[k] && pr.parts[k].trim());
+  if (on.length === 1 && on[0][0] === 'pedido') return pr.parts.pedido.trim();
+  return on.map(([k, l]) => `## ${l}\n${pr.parts[k].trim()}`).join('\n\n');
+}
+
+function newPrompt(tpl){
+  const pr = {id:uid(), title:'', isTemplate:false, parts:{}, on:{}, updated:Date.now(), lastCopied:null};
+  for (const [k] of PROMPT_PARTS){ pr.parts[k] = tpl ? tpl.parts[k] : ''; pr.on[k] = tpl ? tpl.on[k] : (k === 'contexto' || k === 'pedido'); }
+  data.prompts.push(pr);
+  ui.space = 'textos'; ui.prompt = pr.id; ui.note = null; ui.promptView = 'edit'; ui.focus = true;
+  markDirty(); render();
+  const first = PROMPT_PARTS.find(([k]) => pr.on[k] && !pr.parts[k].trim());
+  (first ? $('#part-' + first[0]) : $('#promptTitle'))?.focus();
+}
+
+function promptNavHTML(){
+  const tpls = data.prompts.filter(x => x.isTemplate).sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+  const rec = data.prompts.filter(x => !x.isTemplate).sort((a, b) => b.updated - a.updated);
+  const row = x => `<button class="tree-piece ${ui.prompt === x.id ? 'sel' : ''}" data-prompt="${x.id}"><span class="tglyph">${x.isTemplate ? '◇' : '¶'}</span><span class="pname">${esc(x.title || 'Sin título')}</span><span class="pdate">${agoShort(x.updated)}</span></button>`;
+  return `<p class="tree-label">Plantillas</p>${tpls.length ? tpls.map(row).join('') : `<p class="tree-empty">Marca un prompt como plantilla para reusarlo.</p>`}
+    <p class="tree-label">Recientes</p>${rec.length ? rec.map(row).join('') : `<p class="tree-empty">Todavía no hay prompts.</p>`}`;
+}
+
+function renderPromptCenter(){
+  const pr = curPrompt();
+  if (!pr){
+    head.innerHTML = `<h1 class="month">Prompts</h1>`;
+    const tpls = data.prompts.filter(x => x.isTemplate);
+    body.innerHTML = `<div class="empty"><p>Un lugar amplio para pensar un prompt antes de pegarlo en el chat. Aquí Enter nunca envía nada.</p>
+      <button class="b" id="newPromptEmpty">+ Empezar uno en blanco</button>
+      ${tpls.length ? `<p class="help" style="margin-top:var(--space-5)">O parte de una plantilla:</p><div class="chips" style="justify-content:center">${tpls.map(t => `<button class="chip" data-tpl-start="${t.id}">◇ ${esc(t.title || 'Sin título')}</button>`).join('')}</div>` : ''}</div>`;
+    return;
+  }
+  if (ui.promptView === 'read'){
+    const text = assemble(pr);
+    head.innerHTML = `<button class="b sm back" data-pedit>‹ Seguir editando</button><div class="crumb"></div>
+      <button class="b go deliver" id="copyPrompt"><span>⧉</span> Copiar prompt</button>`;
+    body.innerHTML = `<div class="reading">
+      <p class="reading-hint">Así lo va a recibir la IA. Léelo una vez completo antes de copiarlo.</p>
+      <div class="reading-text">${text ? esc(text) : '<span class="reading-empty">Todavía no hay nada escrito.</span>'}</div>
+      <p class="help">${fmtNum(countWords(text))} palabras. Ctrl + Enter lo copia y Escape vuelve a editar.</p></div>`;
+    return;
+  }
+  head.innerHTML = `<button class="b sm back" data-prompt-back>‹ ${esc(bankLabel())}</button><div class="crumb"><span class="tag">${pr.isTemplate ? '◇ Plantilla' : '¶ Prompt'}</span></div>
+    <button class="b sm" data-focus title="Ctrl + . también lo activa y lo quita">${ui.focus ? 'Salir del modo escritura' : 'Modo escritura'}</button>
+    <button class="b go deliver" id="readPrompt"><span>→</span> Leer y copiar</button>`;
+  const parts = PROMPT_PARTS.filter(([k]) => pr.on[k]), off = PROMPT_PARTS.filter(([k]) => !pr.on[k]);
+  body.innerHTML = `<div class="editor">
+    <input class="title-input" id="promptTitle" value="${esc(pr.title)}" placeholder="¿Para qué es este prompt?" aria-label="Título del prompt" autocomplete="off">
+    <div class="meta"><span class="tag" id="promptWords">${fmtNum(countWords(assemble(pr)))} palabras</span></div>
+    ${parts.map(([k, l, h]) => `<section class="sec part" data-part="${k}">
+      <header class="sec-head"><h3 class="cap-title">${l}</h3>${k === 'pedido' ? '' : `<button class="ib" data-part-off="${k}" title="Quitar sección. El texto se conserva si la vuelves a poner.">×</button>`}</header>
+      <textarea class="part-text ${k === 'pedido' ? 'main' : ''}" id="part-${k}" placeholder="${h}" aria-label="${l}">${esc(pr.parts[k])}</textarea></section>`).join('')}
+    ${off.length ? `<div class="add-row prompt-add">${off.map(([k, l]) => `<button class="add-kind" data-part-on="${k}">+ ${l}</button>`).join('')}</div>` : ''}
+    <p class="help">Enter es solo un salto de línea: aquí nada se envía. Ctrl + Enter abre la lectura final, y ahí otro Ctrl + Enter lo copia.</p>
+  </div>`;
+  body.querySelectorAll('textarea').forEach(autosize);
+}
+
+function promptChecks(pr){
+  const out = [];
+  if (!pr.parts.pedido.trim()) out.push(['warn', 'Falta decir qué necesitas. Es la única sección obligatoria.']);
+  if (!pr.on.contexto || !pr.parts.contexto.trim()) out.push(['tip', 'Sin contexto, la IA adivina quién eres y para qué es. Una o dos frases bastan.']);
+  if (!pr.on.formato || !pr.parts.formato.trim()) out.push(['tip', 'No dices cómo quieres la respuesta. Si te importa la forma, añade «Formato de respuesta».']);
+  const all = PROMPT_PARTS.filter(([k]) => pr.on[k]).map(([k]) => pr.parts[k]).join('\n\n');
+  const longest = Math.max(0, ...all.split(/\n\s*\n/).map(countWords));
+  if (longest > 90) out.push(['tip', `Hay un párrafo de ${longest} palabras. Partirlo en dos ayuda a que se entienda.`]);
+  return out;
+}
+
+function promptRightHTML(pr){
+  if (!pr) return `<div class="group"><h2>Prompts</h2><p class="help" style="margin:0">${data.prompts.length} guardados, ${data.prompts.filter(x => x.isTemplate).length} de ellos plantillas.</p></div>
+    <div class="group"><h2>Cómo se usa</h2><p class="help" style="margin:0">Escribe por secciones y sin prisa: aquí Enter nunca envía nada. Cuando termines, la lectura final te muestra el prompt completo antes de copiarlo para pegarlo en el chat. El buscador de arriba busca en prompts y en el banco a la vez.</p></div>`;
+  const checks = promptChecks(pr);
+  return `<div class="group"><h2>Revisión</h2>
+    <div class="sunken checks">${checks.length ? checks.map(([t, m]) => `<div class="check"><span class="sdot ${t === 'warn' ? 's-produccion' : 's-idea'}"></span><span>${m}</span></div>`).join('')
+      : `<div class="check"><span class="sdot s-publicada"></span><span>Listo para leer y copiar.</span></div>`}</div>
+    ${pr.lastCopied ? `<p class="help">Copiado por última vez ${rel(pr.lastCopied)}.</p>` : ''}</div>
+  <div class="group"><h2>Plantilla</h2>
+    <button class="chip ${pr.isTemplate ? 'active' : ''}" id="tplToggle" aria-pressed="${pr.isTemplate}">◇ Usar como plantilla</button>
+    <p class="help">Las plantillas quedan arriba en la lista y sirven de punto de partida para los prompts que repites.</p>
+    ${pr.isTemplate ? `<button class="b wide" id="newFromTemplate" style="margin-top:var(--space-3)">Nuevo prompt desde esta plantilla</button>` : ''}</div>
+  <div class="group action">
+    <button class="link-btn" id="downloadPrompt">Descargar como archivo .md</button>
+    <button class="link-btn danger" id="deletePrompt">Eliminar prompt</button></div>`;
+}
+
+function promptInput(e){
+  const pr = curPrompt(); if (!pr) return;
+  const t = e.target;
+  if (t.id === 'promptTitle'){ pr.title = t.value; touchPrompt(pr); renderTree(); return; }
+  const part = t.closest('[data-part]');
+  if (part && t.tagName === 'TEXTAREA'){
+    pr.parts[part.dataset.part] = t.value; autosize(t);
+    const w = $('#promptWords'); if (w) w.textContent = `${fmtNum(countWords(assemble(pr)))} palabras`;
+    touchPrompt(pr); renderTree(); renderRight();
+  }
+}
+
+function promptClick(e){
+  if (e.target.closest('#newPromptEmpty')){ newPrompt(null); return; }
+  const ts = e.target.closest('[data-tpl-start]');
+  if (ts){ const tpl = data.prompts.find(x => x.id === ts.dataset.tplStart); if (tpl) newPrompt(tpl); return; }
+  const pr = curPrompt(); if (!pr) return;
+  const on = e.target.closest('[data-part-on]');
+  if (on){ pr.on[on.dataset.partOn] = true; touchPrompt(pr); renderCenter(); renderRight(); $('#part-' + on.dataset.partOn)?.focus(); return; }
+  const off = e.target.closest('[data-part-off]');
+  if (off){ pr.on[off.dataset.partOff] = false; touchPrompt(pr); renderCenter(); renderRight(); }
+}
+
+async function copyPrompt(btn){
+  const pr = curPrompt(); if (!pr) return;
+  const text = assemble(pr);
+  if (!text){ toast('Todavía no hay nada que copiar. Escribe al menos qué necesitas.'); return; }
+  if (await copyText(text)){ pr.lastCopied = Date.now(); markDirty(); flash(btn, '✓ Copiado'); renderRight(); }
+  else toast('No pude copiar automáticamente. Selecciona el texto del recuadro y cópialo con Ctrl + C.');
+}
+
+function promptRightClick(e){
+  const pr = curPrompt(); if (!pr) return;
+  const id = e.target.closest('button')?.id;
+  if (id === 'tplToggle'){ pr.isTemplate = !pr.isTemplate; touchPrompt(pr); render(); }
+  else if (id === 'newFromTemplate') newPrompt(pr);
+  else if (id === 'downloadPrompt') download(`${slug(pr.title || 'prompt')}-prompt.md`, assemble(pr) + '\n', 'text/markdown');
+  else if (id === 'deletePrompt'){
+    if (!confirm(`¿Eliminar «${pr.title || 'Sin título'}»? No se puede deshacer.`)) return;
+    data.prompts = data.prompts.filter(x => x.id !== pr.id);
+    ui.prompt = null; ui.focus = false; markDirty(); render();
+  }
+}
+
+/* --- Banco --- */
+function bankVisible(){
+  const f = ui.bankFilter;
+  let ns = data.notes.filter(n => f.type === 'archived' ? n.archived : !n.archived);
+  if (f.type === 'kind') ns = ns.filter(n => n.kind === f.value);
+  if (f.type === 'topic') ns = ns.filter(n => n.topic === f.value);
+  const q = norm(ui.bankQuery.trim());
+  if (q) ns = ns.filter(n => norm(`${n.title} ${n.text} ${n.topic}`).includes(q));
+  if (f.type === 'prompts' || f.type === 'templates') return [];
+  return ns.sort((a, b) => b.updated - a.updated);
+}
+function bankLabel(){
+  const f = ui.bankFilter;
+  if (f.type === 'kind') return noteKind(f.value)[2];
+  if (f.type === 'topic') return '#' + f.value;
+  if (f.type === 'archived') return 'Archivadas';
+  if (f.type === 'prompts') return 'Prompts';
+  if (f.type === 'templates') return 'Plantillas';
+  return 'Banco';
+}
+
+function bankNavHTML(){
+  const f = ui.bankFilter, live = data.notes.filter(n => !n.archived);
+  const row = (type, value, glyph, label, count) => `<button class="tree-piece ${f.type === type && (f.value || null) === (value || null) ? 'sel' : ''}" data-bank-type="${type}" data-bank-value="${esc(value || '')}"><span class="tglyph">${glyph}</span><span class="pname">${esc(label)}</span><span class="pdate">${count}</span></button>`;
+  const ts = topics();
+  return `<p class="tree-label">Prompts</p>`
+    + row('prompts', null, '¶', 'Prompts', data.prompts.filter(x => !x.isTemplate).length)
+    + row('templates', null, '◇', 'Plantillas', data.prompts.filter(x => x.isTemplate).length)
+    + `<p class="tree-label">Banco</p>`
+    + row('all', null, '✱', 'Todo el banco', live.length)
+    + NOTE_KINDS.map(k => row('kind', k[0], k[3], k[2], live.filter(n => n.kind === k[0]).length)).join('')
+    + `<p class="tree-label">Temas</p>` + (ts.length ? ts.map(([t, c]) => row('topic', t, '#', t, c)).join('') : `<p class="tree-empty">Los temas aparecen cuando guardas algo con tema.</p>`)
+    + `<p class="tree-label">Archivo</p>` + row('archived', null, '▭', 'Archivadas', data.notes.filter(n => n.archived).length);
+}
+
+function captureCardHTML(){
+  return `<section class="sec capture-card">
+    <textarea id="bankCapture" rows="3" placeholder="Pega o escribe algo que quieras conservar. La primera línea queda como título." aria-label="Guardar en el banco">${esc(ui.capDraft)}</textarea>
+    <div class="capture-row">
+      <div class="chips">${NOTE_KINDS.map(k => `<button class="chip ${ui.capKind === k[0] ? 'active' : ''}" data-cap-kind="${k[0]}" aria-pressed="${ui.capKind === k[0]}">${k[3]} ${k[1]}</button>`).join('')}</div>
+      <input class="field sm cap-topic" id="capTopic" list="topicList" value="${esc(ui.capTopic)}" placeholder="Tema" aria-label="Tema" autocomplete="off">
+      <button class="b" id="capSave">Guardar</button>
+    </div>${topicDatalist()}
+    <p class="help">Ctrl + Enter guarda. Enter es solo un salto de línea.</p></section>`;
+}
+
+const isPromptFilter = () => ui.bankFilter.type === 'prompts' || ui.bankFilter.type === 'templates';
+function promptsVisible(){
+  const q = norm(ui.bankQuery.trim());
+  let ps = data.prompts;
+  if (ui.bankFilter.type === 'templates') ps = ps.filter(x => x.isTemplate);
+  else if (ui.bankFilter.type === 'prompts') ps = ps.filter(x => !x.isTemplate);
+  else if (!q) return [];
+  if (q) ps = ps.filter(x => norm(x.title + ' ' + Object.values(x.parts).join(' ')).includes(q));
+  return ps.slice().sort((a, b) => b.updated - a.updated);
+}
+function promptCardHTML(pr){
+  const excerpt = (pr.parts.pedido || Object.values(pr.parts).find(v => v.trim()) || '').trim();
+  return `<button class="ncard" data-open-prompt="${pr.id}">
+    <span class="ncard-meta"><span class="tag">${pr.isTemplate ? '◇ Plantilla' : '¶ Prompt'}</span><span class="tag">${fmtNum(countWords(assemble(pr)))} palabras</span><span class="ledited">${agoShort(pr.updated)}</span></span>
+    <span class="ncard-title">${esc(pr.title || 'Sin título')}</span>${excerpt ? `<span class="ncard-text">${esc(excerpt)}</span>` : ''}</button>`;
+}
+function cardsHTML(){
+  if (isPromptFilter()){
+    const ps = promptsVisible();
+    if (ps.length) return ps.map(promptCardHTML).join('');
+    if (ui.bankQuery.trim()) return `<p class="hint-empty">No encontré nada con «${esc(ui.bankQuery.trim())}».</p>`;
+    return `<div class="empty" style="margin-top:6vh"><p>${ui.bankFilter.type === 'templates' ? 'Todavía no hay plantillas. Abre un prompt que repitas y márcalo como plantilla.' : 'Un lugar amplio para pensar un prompt antes de pegarlo en el chat. Aquí Enter nunca envía nada.'}</p>${ui.bankFilter.type === 'templates' ? '' : '<button class="b" id="newPromptEmpty">+ Empezar uno en blanco</button>'}</div>`;
+  }
+  const extra = ui.bankFilter.type === 'all' ? promptsVisible().map(promptCardHTML).join('') : '';
+  const ns = bankVisible();
+  if (!ns.length && extra) return extra;
+  if (!ns.length) return `<p class="hint-empty">${ui.bankQuery.trim() ? `No encontré nada con «${esc(ui.bankQuery.trim())}».` : 'Nada guardado todavía en esta vista.'}</p>`;
+  return extra + ns.map(n => {
+    const k = noteKind(n.kind), b = n.brandId ? data.brands.find(x => x.id === n.brandId) : null;
+    return `<button class="ncard k-${n.kind}" data-note="${n.id}">
+      <span class="ncard-meta"><span class="tag">${k[3]} ${k[1]}</span>${n.topic ? `<span class="tag">#${esc(n.topic)}</span>` : ''}${b ? `<span class="avatar xs" title="${esc(b.name)}">${esc(b.emoji || (b.name.trim()[0] || '?').toUpperCase())}</span>` : ''}<span class="ledited">${agoShort(n.updated)}</span></span>
+      <span class="ncard-title">${esc(n.title || 'Sin título')}</span>${n.text ? `<span class="ncard-text">${esc(n.text)}</span>` : ''}</button>`;
+  }).join('');
+}
+
+function renderBankCenter(){
+  const n = curNote();
+  if (n){
+    const k = noteKind(n.kind);
+    head.innerHTML = `<button class="b sm back" data-note-back>‹ ${esc(bankLabel())}</button><div class="crumb"></div>
+      <button class="b sm" data-focus title="Ctrl + . también lo activa y lo quita">${ui.focus ? 'Salir del modo escritura' : 'Modo escritura'}</button>`;
+    body.innerHTML = `<div class="editor">
+      <input class="title-input" id="noteTitle" value="${esc(n.title)}" placeholder="Título" aria-label="Título" autocomplete="off">
+      <div class="meta"><span class="tag">${k[3]} ${k[1]}</span>${n.topic ? `<span class="tag">#${esc(n.topic)}</span>` : ''}<span class="tag">Guardado ${rel(n.created)}</span></div>
+      <textarea class="note-text" id="noteText" placeholder="Texto" aria-label="Texto">${esc(n.text)}</textarea></div>`;
+    body.querySelectorAll('textarea').forEach(autosize);
+    return;
+  }
+  head.innerHTML = `<h1 class="month">${esc(bankLabel())}</h1><input class="field head-search" id="bankSearch" type="search" value="${esc(ui.bankQuery)}" placeholder="Buscar en Textos" aria-label="Buscar en Textos" autocomplete="off">`;
+  body.innerHTML = `<div class="list">${ui.bankFilter.type === 'archived' || isPromptFilter() ? '' : captureCardHTML()}<div class="ncards" id="bankCards">${cardsHTML()}</div></div>`;
+  const c = $('#bankCapture'); if (c) autosize(c);
+}
+
+function noteRightHTML(n){
+  return `<div class="group"><h2>Tipo</h2><div class="chips">${NOTE_KINDS.map(k => `<button class="chip ${n.kind === k[0] ? 'active' : ''}" data-note-kind="${k[0]}" aria-pressed="${n.kind === k[0]}">${k[3]} ${k[1]}</button>`).join('')}</div></div>
+  <div class="group"><h2>Tema</h2><input class="field" id="noteTopic" list="topicList" value="${esc(n.topic)}" placeholder="Por ejemplo: mejorar redes" autocomplete="off">${topicDatalist()}
+    <p class="help">Los temas juntan lo que viene de conversaciones distintas.</p></div>
+  <div class="group"><h2>Marca</h2><select class="field" id="noteBrand" aria-label="Marca"><option value="">Sin marca</option>${data.brands.map(b => `<option value="${b.id}" ${b.id === n.brandId ? 'selected' : ''}>${esc((b.emoji ? b.emoji + ' ' : '') + b.name)}</option>`).join('')}</select>
+    ${n.kind === 'frase' ? `<p class="help">Las frases de marca aparecen dentro de los guiones de esa marca, listas para insertar. Sin marca, aparecen en todos.</p>` : ''}</div>
+  <div class="group"><h2>De dónde salió</h2><input class="field" id="noteSource" value="${esc(n.source)}" placeholder="Enlace al chat, o una nota" autocomplete="off">
+    ${/^https?:\/\//i.test(n.source) ? `<a class="src-link" href="${esc(n.source)}" target="_blank" rel="noopener noreferrer">Abrir enlace</a>` : ''}</div>
+  <div class="group action">
+    <button class="b wide" id="copyNote">Copiar texto</button>
+    <button class="link-btn" id="archiveNote">${n.archived ? 'Sacar del archivo' : 'Archivar'}</button>
+    <button class="link-btn danger" id="deleteNote">Eliminar</button></div>`;
+}
+
+function bankRightHTML(){
+  const n = curNote(); if (n) return noteRightHTML(n);
+  if (isPromptFilter()) return promptRightHTML(null);
+  const live = data.notes.filter(x => !x.archived), vis = bankVisible();
+  return `<div class="group"><h2>Banco</h2>
+    <div class="sunken stats">${NOTE_KINDS.map(k => `<div class="stat"><span class="tglyph">${k[3]}</span><span>${k[2]}</span><b>${live.filter(x => x.kind === k[0]).length}</b></div>`).join('')}</div>
+    <p class="help">${topics().length} temas. ${data.notes.filter(x => x.archived).length} archivadas.</p></div>
+  <div class="group"><h2>Cómo se usa</h2><p class="help" style="margin:0">Pega arriba lo que quieras conservar de un chat: la primera línea queda como título. Ponle un tema para juntar lo que hoy está regado en conversaciones distintas. Las frases de marca aparecen después dentro del editor de guiones.</p></div>
+  <div class="group action"><button class="b go deliver wide" id="exportBank" ${vis.length ? '' : 'disabled'}><span>↓</span> Descargar esta vista</button></div>`;
+}
+
+function saveCapture(){
+  const ta = $('#bankCapture'); if (!ta) return;
+  const raw = ta.value.trim(); if (!raw){ ta.focus(); return; }
+  const topic = ($('#capTopic')?.value || '').trim();
+  data.notes.push(makeNote(raw, ui.capKind, topic, ui.brand !== 'all' ? ui.brand : null, ''));
+  ui.capDraft = ''; ui.capTopic = topic;
+  markDirty(); renderTree(); renderCenter(); renderRight();
+  $('#bankCapture')?.focus();
+}
+
+function bankInput(e){
+  const t = e.target;
+  if (t.id === 'bankCapture'){ ui.capDraft = t.value; autosize(t); return; }
+  if (t.id === 'capTopic'){ ui.capTopic = t.value; return; }
+  const n = curNote(); if (!n) return;
+  if (t.id === 'noteTitle'){ n.title = t.value; touchNote(n); }
+  if (t.id === 'noteText'){ n.text = t.value; autosize(t); touchNote(n); }
+}
+
+function bankClick(e){
+  const ck = e.target.closest('[data-cap-kind]');
+  if (ck){ ui.capKind = ck.dataset.capKind; body.querySelectorAll('[data-cap-kind]').forEach(c => { const a = c.dataset.capKind === ui.capKind; c.classList.toggle('active', a); c.setAttribute('aria-pressed', a); }); return; }
+  if (e.target.closest('#capSave')){ saveCapture(); return; }
+  if (e.target.closest('#newPromptEmpty')){ newPrompt(null); return; }
+  const op = e.target.closest('[data-open-prompt]');
+  if (op){ ui.prompt = op.dataset.openPrompt; ui.note = null; ui.promptView = 'edit'; render(); return; }
+  const nc = e.target.closest('[data-note]');
+  if (nc){ ui.note = nc.dataset.note; ui.prompt = null; render(); }
+}
+
+function noteRightClick(e){
+  if (e.target.closest('#exportBank')){ download(`banco-${slug(bankLabel())}.md`, bankMD(), 'text/markdown'); return; }
+  const n = curNote(); if (!n) return;
+  const nk = e.target.closest('[data-note-kind]');
+  if (nk){ n.kind = nk.dataset.noteKind; touchNote(n); renderCenter(); renderRight(); renderTree(); return; }
+  const btn = e.target.closest('button'); const id = btn?.id;
+  if (id === 'copyNote') copyText(fullNote(n)).then(ok => ok ? flash(btn, '✓ Copiado') : toast('No pude copiar automáticamente. Selecciona el texto y cópialo con Ctrl + C.'));
+  else if (id === 'archiveNote'){ n.archived = !n.archived; touchNote(n); render(); }
+  else if (id === 'deleteNote'){
+    if (!confirm(`¿Eliminar «${n.title || 'Sin título'}»? No se puede deshacer.`)) return;
+    data.notes = data.notes.filter(x => x.id !== n.id); ui.note = null; ui.focus = false; markDirty(); render();
+  }
+}
+
+function bankMD(){
+  const L = [`# ${bankLabel() === 'Banco' ? 'Banco' : 'Banco: ' + bankLabel()}`, ''];
+  for (const n of bankVisible()){
+    L.push(`## ${n.title || 'Sin título'}`, '');
+    if (n.text) L.push(n.text, '');
+    const meta = [`Tipo: ${noteKind(n.kind)[1]}`];
+    if (n.topic) meta.push(`Tema: ${n.topic}`);
+    if (n.source) meta.push(`Fuente: ${n.source}`);
+    L.push(`_${meta.join('. ')}._`, '');
+  }
+  return L.join('\n');
+}
+
+/* --- Puente con el planner --- */
+function frasesHTML(p){
+  const fr = data.notes.filter(n => n.kind === 'frase' && !n.archived && (!n.brandId || n.brandId === p.brandId)).sort((a, b) => b.updated - a.updated).slice(0, 8);
+  return `<div class="group"><h2>Frases de marca</h2>${fr.length
+    ? `<div class="frases">${fr.map(n => `<div class="frase"><span class="frase-text">${esc(fullNote(n))}</span><button class="b sm" data-insert="${n.id}">Insertar</button></div>`).join('')}</div><p class="help">Se insertan donde estaba el cursor en el guion. Con ✦, junto a cada línea, mandas una línea al Banco.</p>`
+    : `<p class="help" style="margin:0">Guarda frases de marca en el Banco y aparecerán aquí para insertarlas. Con ✦, junto a cada línea del guion, mandas una al Banco.</p>`}</div>`;
+}
+
+function insertFrase(n, btn){
+  const text = fullNote(n);
+  let ta = null;
+  if (ui.view === 'script' && lastFocus && lastFocus.piece === ui.piece){
+    ta = lastFocus.blk ? body.querySelector(`[data-blk="${lastFocus.blk}"] textarea`) : $('#' + lastFocus.id);
+  }
+  if (!ta){ copyText(text).then(ok => flash(btn, ok ? 'Copiada' : 'No se pudo')); return; }
+  const s = ta.selectionStart ?? ta.value.length, e = ta.selectionEnd ?? s;
+  const before = ta.value.slice(0, s), after = ta.value.slice(e);
+  const sep = before && !/\s$/.test(before) ? ' ' : '';
+  ta.value = before + sep + text + after;
+  const pos = (before + sep + text).length;
+  ta.dispatchEvent(new Event('input', {bubbles:true}));
+  ta.focus(); ta.setSelectionRange(pos, pos);
+}
+
+/* ===== Puente con Tareas =====
+   Tareas es dueño de clientes, proyectos y tareas. Aquí solo se lee y se pide crear. */
+function koruHub(){
+  try { return window.parent !== window && window.parent.KoruHub ? window.parent.KoruHub : null; }
+  catch (err){ return null; }
+}
+const tracker = () => { const h = koruHub(); const t = h && h.tracker(); return t && t.ready() ? t : null; };
+const sameName = (a, b) => norm(a).replace(/[^a-z0-9]/g, '') === norm(b).replace(/[^a-z0-9]/g, '');
+
+function rowTasks(p){
+  const t = tracker(); if (!t) return '';
+  const pg = t.progress(p.id);
+  return pg.total ? `<span class="ltasks ${pg.done === pg.total ? 'ok' : ''}" title="Tareas hechas">${pg.done}/${pg.total}</span>` : '';
+}
+
+function defaultTasks(p){
+  const title = p.title || 'Sin título';
+  const steps = p.type === 'video' ? ['Escribir guion', 'Grabar', 'Editar', 'Publicar']
+    : p.type === 'carrusel' ? ['Escribir textos', 'Diseñar diapositivas', 'Publicar'] : ['Diseñar', 'Publicar'];
+  return steps.map(x => `${x}: ${title}`).join('\n');
+}
+
+function openTaskForm(p){
+  const t = tracker(); if (!t) return;
+  const pg = t.progress(p.id), clients = t.clients(), brand = brandOf(p);
+  const match = clients.find(c => c.id === pg.clientId) || clients.find(c => sameName(c.name, brand.name));
+  const clientId = match ? match.id : '__new';
+  const projectId = pg.projectId && clientId === pg.clientId ? pg.projectId : '__new';
+  ui.taskForm = {pieceId:p.id, clientId, projectId, projectName:p.title || 'Contenido', text:defaultTasks(p)};
+  renderRight();
+  $('#tfTasks')?.focus();
+}
+
+function tasksHTML(p){
+  const h = koruHub(); if (!h) return '';
+  const t = tracker();
+  if (!t) return `<div class="group"><h2>Tareas</h2>
+    <p class="help" style="margin:0">Abre tus tareas en el espacio Tareas, desde GitHub o desde tu archivo, para poder enlazar esta pieza a un proyecto.</p>
+    <button class="b wide" data-go-tareas style="margin-top:var(--space-3)">Ir a Tareas</button></div>`;
+  const f = ui.taskForm && ui.taskForm.pieceId === p.id ? ui.taskForm : null;
+  if (f){
+    const clients = t.clients(), c = clients.find(x => x.id === f.clientId);
+    const n = f.text.split('\n').filter(x => x.trim()).length;
+    return `<div class="group"><h2>Crear tareas</h2><div class="tf">
+      <label class="flabel">Cliente<select class="field" id="tfClient">
+        ${clients.map(x => `<option value="${x.id}" ${x.id === f.clientId ? 'selected' : ''}>${esc((x.emoji ? x.emoji + ' ' : '') + x.name)}</option>`).join('')}
+        <option value="__new" ${f.clientId === '__new' ? 'selected' : ''}>+ Cliente nuevo: ${esc(brandOf(p).name)}</option></select></label>
+      <label class="flabel">Proyecto<select class="field" id="tfProject">
+        ${(c ? c.projects : []).map(x => `<option value="${x.id}" ${x.id === f.projectId ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}
+        <option value="__new" ${f.projectId === '__new' ? 'selected' : ''}>+ Proyecto nuevo</option></select></label>
+      ${f.projectId === '__new' ? `<label class="flabel">Nombre del proyecto<input class="field" id="tfProjectName" value="${esc(f.projectName)}" autocomplete="off"></label>` : ''}
+      <label class="flabel">Tareas, una por línea<textarea class="field tf-tasks" id="tfTasks" rows="5">${esc(f.text)}</textarea></label>
+      <div class="row"><button class="b" id="tfCreate" style="flex:1" ${n ? '' : 'disabled'}>Crear ${n} ${n === 1 ? 'tarea' : 'tareas'}</button><button class="link-btn" id="tfCancel">Cancelar</button></div>
+      <p class="help" style="margin:0">Cada tarea queda enlazada a esta pieza. Un proyecto puede reunir varias piezas, como una campaña.</p>
+    </div></div>`;
+  }
+  const pg = t.progress(p.id);
+  if (pg.total){
+    const pct = pg.done === pg.total ? 100 : Math.floor(pg.done / pg.total * 100);
+    return `<div class="group"><h2>Tareas</h2>
+      <div class="sunken"><strong>${pg.done} de ${pg.total}</strong> tareas hechas<br>${esc(pg.clientName)} › ${esc(pg.projectName)}</div>
+      <div class="tbar ${pct === 100 ? 'done' : ''}" role="img" aria-label="${pct} % hecho"><i style="width:${pct}%"></i></div>
+      <button class="b wide" data-open-tasks style="margin-top:var(--space-3)">Ver en Tareas</button>
+      <button class="link-btn" data-task-form>Añadir más tareas</button>
+      <p class="help">El estado de la pieza lo sigues cambiando tú: las tareas miden el avance, no lo deciden.</p></div>`;
+  }
+  return `<div class="group"><h2>Tareas</h2>
+    <p class="help" style="margin:0 0 var(--space-3)">Convierte esta pieza en tareas de un proyecto, sin salir del planner.</p>
+    <button class="b wide" data-task-form>Crear tareas</button></div>`;
+}
+
+function taskRightClick(e){
+  const p = curPiece(), h = koruHub();
+  if (e.target.closest('[data-go-tareas]')){ if (h) h.go('tareas'); return true; }
+  if (!p) return false;
+  if (e.target.closest('[data-task-form]')){ openTaskForm(p); return true; }
+  if (e.target.closest('[data-open-tasks]')){ const t = tracker(); if (t && h){ const pg = t.progress(p.id); h.openTasks(pg.clientId, pg.projectId); } return true; }
+  const id = e.target.closest('button')?.id;
+  if (id === 'tfCancel'){ ui.taskForm = null; renderRight(); return true; }
+  if (id === 'tfCreate'){
+    const t = tracker(), f = ui.taskForm; if (!t || !f) return true;
+    const tasks = f.text.split('\n').map(x => x.trim()).filter(Boolean);
+    if (!tasks.length) return true;
+    const b = brandOf(p);
+    try {
+      t.addTasks({clientId:f.clientId === '__new' ? null : f.clientId, clientName:b.name, clientEmoji:b.emoji,
+        projectId:f.projectId === '__new' ? null : f.projectId, projectName:f.projectName.trim() || p.title || 'Contenido',
+        tasks, ref:{space:'planner', id:p.id, title:p.title || 'Sin título'}});
+    } catch (err){
+      console.error('No se pudieron crear las tareas:', err);
+      toast(`No pude crear las tareas: ${err.message}. Abre el espacio Tareas y vuelve a intentarlo.`);
+      return true;
+    }
+    ui.taskForm = null; renderRight(); renderCenter();
+    return true;
+  }
+  return false;
+}
+function taskRightChange(e){
+  const f = ui.taskForm; if (!f) return false;
+  if (e.target.id === 'tfClient'){ f.clientId = e.target.value; f.projectId = '__new'; renderRight(); return true; }
+  if (e.target.id === 'tfProject'){ f.projectId = e.target.value; renderRight(); return true; }
+  return false;
+}
+function taskRightInput(e){
+  const f = ui.taskForm; if (!f) return false;
+  if (e.target.id === 'tfProjectName'){ f.projectName = e.target.value; return true; }
+  if (e.target.id === 'tfTasks'){
+    f.text = e.target.value;
+    const n = f.text.split('\n').filter(x => x.trim()).length, b = $('#tfCreate');
+    if (b){ b.disabled = !n; b.textContent = `Crear ${n} ${n === 1 ? 'tarea' : 'tareas'}`; }
+    return true;
+  }
+  return false;
+}
+
+/* API para el contenedor */
+window.KoruApp = {
+  setSpace(s){
+    if (s !== 'planner' && s !== 'textos') return;
+    ui.space = s; ui.focus = false; ui.taskForm = null;
+    if (s === 'textos') ui.promptView = 'edit';
+    render();
+  },
+  openPiece(id){
+    if (!data.pieces.some(x => x.id === id)){ toast('Esa pieza ya no existe en el planner.'); return false; }
+    ui.space = 'planner'; ui.focus = false; openPiece(id); return true;
+  },
+  trackerChanged(){
+    if (ui.space !== 'planner' || ui.taskForm) return;
+    const ae = document.activeElement;
+    if (ae && right.contains(ae) && /INPUT|TEXTAREA|SELECT/.test(ae.tagName)) return;
+    renderRight();
+    if (ui.view === 'list' && !(ae && body.contains(ae) && /INPUT|TEXTAREA/.test(ae.tagName))) renderCenter();
+  }
+};
+
+/* ===== Eventos: panel izquierdo ===== */
+primaryBtn.addEventListener('click', () => {
+  if (ui.space === 'planner') newPiece(null);
+  else newPrompt(null);
+});
+spacesEl.addEventListener('click', e => {
+  const b = e.target.closest('[data-space]'); if (!b) return;
+  const h = koruHub();
+  if (b.dataset.space === 'tareas'){ if (h) h.go('tareas'); return; }
+  if (b.dataset.space === ui.space) return;
+  if (h) h.go(b.dataset.space); else KoruApp.setSpace(b.dataset.space);
+});
+
+tree.addEventListener('click', e => {
+  const pr = e.target.closest('[data-prompt]');
+  if (pr){ ui.prompt = pr.dataset.prompt; ui.promptView = 'edit'; render(); return; }
+  const bk = e.target.closest('[data-bank-type]');
+  if (bk){
+    ui.bankFilter = {type:bk.dataset.bankType, value:bk.dataset.bankValue || null};
+    ui.note = null; ui.prompt = null; ui.focus = false;
+    if (ui.bankFilter.type === 'kind') ui.capKind = ui.bankFilter.value;
+    if (ui.bankFilter.type === 'topic') ui.capTopic = ui.bankFilter.value;
+    render(); return;
+  }
+  const t = e.target.closest('[data-toggle]');
+  if (t){ ui.collapsed[t.dataset.toggle] = !ui.collapsed[t.dataset.toggle]; renderTree(); return; }
+  const br = e.target.closest('[data-brand]');
+  if (br){
+    ui.brand = br.dataset.brand;
+    if (ui.view === 'script'){ ui.view = ui.back || 'list'; ui.focus = false; }
+    const p = curPiece(); if (p && ui.brand !== 'all' && p.brandId !== ui.brand) ui.piece = null;
+    render(); return;
+  }
+  const pc = e.target.closest('[data-piece]');
+  if (pc){
+    const p = data.pieces.find(x => x.id === pc.dataset.piece);
+    if (p && p.date){ const d = parseKey(p.date); ui.month = new Date(d.getFullYear(), d.getMonth(), 1); }
+    openPiece(pc.dataset.piece); return;
+  }
+  if (e.target.closest('#newBrandBtn')){
+    const b = {id:uid(), name:'Nueva marca', emoji:''};
+    data.brands.push(b); ui.brand = b.id; ui.piece = null; ui.focus = false;
+    if (ui.view === 'script') ui.view = ui.back || 'list';
+    markDirty(); render();
+    const n = $('#brandName'); if (n){ n.focus(); n.select(); }
+  }
+});
+
+storageEl.addEventListener('click', async e => {
+  const id = e.target.closest('button')?.id;
+  if (!id) return;
+  if (id === 'saveCopy') downloadCopy();
+  else if (id === 'openFile') fileInput.click();
+  else if (id === 'toggleConnect'){ ui.connectOpen = !ui.connectOpen; ui.connectError = ''; renderStorage(); if (ui.connectOpen) $('#ghToken')?.focus(); }
+  else if (id === 'connectBtn'){
+    const owner = $('#ghOwner').value.trim(), repo = $('#ghRepo').value.trim(), token = $('#ghToken').value.trim();
+    if (!owner || !repo || !token){ ui.connectError = 'Llena los tres campos para conectar.'; renderStorage(); return; }
+    const btn = e.target.closest('button'); btn.disabled = true; btn.textContent = 'Conectando…';
+    try { await connect(owner, repo, token); }
+    catch (err){
+      console.error('No se pudo conectar con GitHub:', err);
+      store.mode = 'local'; store.cfg = null; store.sha = null; store.loaded = false;
+      ui.connectError = err instanceof TypeError ? `No hay conexión con GitHub (${err.message}). Revisa tu internet y vuelve a intentarlo.` : err.message;
+      renderStorage();
+      const f = $('#ghOwner'); if (f){ f.value = owner; $('#ghRepo').value = repo; $('#ghToken').value = token; }
+    }
+  }
+  else if (id === 'disconnect'){
+    const msg = isDirty() ? 'Hay cambios que todavía no llegan a GitHub. Si desconectas ahora se quedan solo en esta pestaña. ¿Desconectar?' : '¿Desconectar de GitHub? Tus guiones siguen allá; esta pestaña queda con una copia que puedes descargar.';
+    if (!confirm(msg)) return;
+    try { localStorage.removeItem(CFG_KEY); } catch (err){ console.warn('No se pudo olvidar la conexión guardada:', err); }
+    clearTimeout(store.timer); clearTimeout(store.retry);
+    store.mode = 'local'; store.cfg = null; store.sha = null; store.loaded = false; store.state = 'idle';
+    store.savedRev = store.rev - 1;
+    render();
+  }
+  else if (id === 'pullRemote') pullRemote(true);
+  else if (id === 'retry'){ if (store.loaded) { store.state = 'idle'; saveNow(); } else startupLoad(); }
+});
+
+fileInput.addEventListener('change', () => { const f = fileInput.files[0]; fileInput.value = ''; if (f) openFileObj(f); });
+
+async function openFileObj(file){
+  if (data.pieces.length && (isDirty() || store.mode === 'github') && !confirm(`Abrir «${file.name}» reemplaza los guiones que tienes en pantalla${store.mode === 'github' ? ' y los de GitHub' : ''}. ¿Continuar?`)) return;
+  let d;
+  try { d = normalize(JSON.parse(await file.text())); }
+  catch (err){ console.error('Archivo no válido:', err); toast(`No pude abrir «${file.name}»: ${err.message}. Elige un archivo descargado desde esta herramienta.`); return; }
+  applyData(d);
+  if (store.mode === 'github'){ markDirty(); }
+  else { store.rev++; store.savedRev = store.rev; store.lastSaved = null; }
+  render();
+}
+
+/* ===== Eventos: centro ===== */
+head.addEventListener('click', e => {
+  const nav = e.target.closest('[data-nav]');
+  if (nav){
+    const n = +nav.dataset.nav;
+    ui.month = n === 0 ? new Date(new Date().getFullYear(), new Date().getMonth(), 1) : new Date(ui.month.getFullYear(), ui.month.getMonth() + n, 1);
+    renderCenter(); if (!curPiece()) renderRight(); return;
+  }
+  const v = e.target.closest('[data-view]');
+  if (v){ ui.view = v.dataset.view; if (ui.view === 'list') ui.piece = null; render(); return; }
+  if (e.target.closest('[data-back]')){ goBack(); return; }
+  if (e.target.closest('[data-focus]')){ toggleFocus(); return; }
+  if (e.target.closest('#readPrompt')){ ui.promptView = 'read'; renderCenter(); return; }
+  if (e.target.closest('[data-pedit]')){ ui.promptView = 'edit'; renderCenter(); return; }
+  const cp = e.target.closest('#copyPrompt'); if (cp){ copyPrompt(cp); return; }
+  if (e.target.closest('[data-note-back]')){ ui.note = null; ui.focus = false; render(); return; }
+  if (e.target.closest('[data-prompt-back]')){ ui.prompt = null; ui.focus = false; render(); }
+});
+head.addEventListener('input', e => {
+  if (e.target.id === 'bankSearch'){ ui.bankQuery = e.target.value; const c = $('#bankCards'); if (c) c.innerHTML = cardsHTML(); renderRight(); }
+});
+
+body.addEventListener('input', e => {
+  if (ui.space === 'textos'){ if (curPrompt()) promptInput(e); else bankInput(e); return; }
+  const p = curPiece(); if (!p) return;
+  const t = e.target;
+  if (t.id === 'titleInput'){ p.title = t.value; touch(p); renderTree(); const n = right.querySelector('.piece-name'); if (n) n.textContent = p.title || 'Sin título'; return; }
+  if (t.id === 'captionInput'){ p.caption = t.value; $('#capCount').textContent = `${fmtNum(t.value.length)} / ${fmtNum(CAPTION_LIMIT)}`; autosize(t); updateLive(p); touch(p); return; }
+  if (t.id === 'hashtagsInput'){ p.hashtags = t.value; touch(p); return; }
+  const loc = locate(p, t); if (!loc) return;
+  if (t.classList.contains('sec-title')){ loc.s.title = t.value; touch(p); return; }
+  if (t.tagName === 'TEXTAREA' && loc.b){
+    const m = t.value.match(/^\(([a-záéíóú]+)\)\s?/i);
+    if (m){
+      const k = SHORTCUTS[m[1].toLowerCase()];
+      if (k && kindsFor(p.type).some(x => x[0] === k)){
+        loc.b.kind = k;
+        t.value = t.value.slice(m[0].length);
+        loc.row.className = `blk k-${k}`;
+        loc.row.querySelector('.kind').textContent = kindLabel(p.type, k);
+        t.placeholder = placeholderFor(p.type, k);
+        t.setAttribute('aria-label', kindLabel(p.type, k));
+        t.setSelectionRange(0, 0);
+      }
+    }
+    loc.b.text = t.value; autosize(t); updateLive(p); touch(p);
+  }
+});
+
+body.addEventListener('keydown', e => {
+  if (ui.space !== 'planner') return;
+  if (e.target.id === 'captureInput'){
+    if (e.key === 'Escape'){ e.target.value = ''; return; }
+    if (e.key !== 'Enter' || e.isComposing) return;
+    e.preventDefault();
+    const title = e.target.value.trim(); if (!title) return;
+    const brandId = ui.brand !== 'all' ? ui.brand : data.brands[0].id;
+    const p = {id:uid(), brandId, title, type:'video', status:'idea', date:null, sections:defaultSections('video'), caption:'', hashtags:'', links:[], images:[], updated:Date.now()};
+    data.pieces.push(p); touch(p);
+    renderTree(); renderCenter(); renderRight();
+    $('#captureInput')?.focus();
+    return;
+  }
+  if (e.target.classList.contains('pchip') && (e.key === 'Enter' || e.key === ' ')){ e.preventDefault(); if (e.key === 'Enter') openPiece(e.target.dataset.piece); else selectChip(e.target.dataset.piece); return; }
+  const t = e.target;
+  if (t.tagName !== 'TEXTAREA' || !t.closest('[data-blk]')) return;
+  const p = curPiece(); const loc = locate(p, t); if (!loc || !loc.b) return;
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing){
+    e.preventDefault();
+    const after = t.value.slice(t.selectionEnd);
+    loc.b.text = t.value.slice(0, t.selectionStart);
+    const nb = {id:uid(), kind:loc.b.kind, text:after};
+    loc.s.blocks.splice(loc.bi + 1, 0, nb);
+    touch(p); renderCenter(); focusBlock(nb.id, 0); updateLive(p);
+    return;
+  }
+  if (e.key === 'Backspace' && t.value === ''){
+    e.preventDefault();
+    loc.s.blocks.splice(loc.bi, 1);
+    const prev = loc.s.blocks[loc.bi - 1] || loc.s.blocks[loc.bi];
+    touch(p); renderCenter(); updateLive(p);
+    if (prev) focusBlock(prev.id, 'end');
+    return;
+  }
+  if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')){
+    e.preventDefault();
+    const pos = t.selectionStart;
+    const id = moveBlock(p, loc.si, loc.bi, e.key === 'ArrowUp' ? -1 : 1);
+    if (id){ renderCenter(); updateLive(p); focusBlock(id, pos); }
+  }
+});
+
+body.addEventListener('click', e => {
+  if (ui.space === 'textos'){ if (curPrompt()) promptClick(e); else bankClick(e); return; }
+  const add = e.target.closest('[data-add]');
+  if (add){ newPiece(add.dataset.add); return; }
+  const op = e.target.closest('[data-open]');
+  if (op){ openPiece(op.dataset.open); return; }
+  const lg = e.target.closest('[data-lgroup]');
+  if (lg){ const k = lg.dataset.lgroup; const cur = k in ui.listCollapsed ? ui.listCollapsed[k] : k === 'publicada'; ui.listCollapsed[k] = !cur; renderCenter(); return; }
+  const p = curPiece(); if (!p || ui.view !== 'script') return;
+  if (e.target.closest('#addSection')){
+    const kind = p.type === 'video' ? 'voz' : 'texto';
+    const s = {id:uid(), title:'', blocks:[{id:uid(), kind, text:''}]};
+    p.sections.push(s); touch(p); renderCenter(); updateLive(p);
+    body.querySelector(`[data-sec="${s.id}"] .sec-title`)?.focus();
+    return;
+  }
+  const loc = locate(p, e.target); if (!loc) return;
+  const kindBtn = e.target.closest('.kind');
+  const bb = e.target.closest('[data-blk-bank]');
+  if (bb && loc.b){
+    const t = loc.b.text.trim();
+    if (!t){ flash(bb, '·', 900); return; }
+    data.notes.push(makeNote(t, 'frase', '', p.brandId, `Guion: ${p.title || 'Sin título'}`));
+    markDirty(); flash(bb, '✓', 1200); renderRight(); return;
+  }
+  if (kindBtn && loc.b){
+    const ks = kindsFor(p.type).map(k => k[0]);
+    loc.b.kind = ks[(ks.indexOf(loc.b.kind) + 1) % ks.length];
+    loc.row.className = `blk k-${loc.b.kind}`;
+    kindBtn.textContent = kindLabel(p.type, loc.b.kind);
+    const ta = loc.row.querySelector('textarea'); ta.placeholder = placeholderFor(p.type, loc.b.kind); ta.setAttribute('aria-label', kindLabel(p.type, loc.b.kind));
+    updateLive(p); touch(p); return;
+  }
+  const ak = e.target.closest('[data-add-kind]');
+  if (ak){ const nb = {id:uid(), kind:ak.dataset.addKind, text:''}; loc.s.blocks.push(nb); touch(p); renderCenter(); focusBlock(nb.id, 0); return; }
+  const sm = e.target.closest('[data-sec-move]');
+  if (sm){ const j = loc.si + (+sm.dataset.secMove); if (j < 0 || j >= p.sections.length) return; p.sections.splice(loc.si, 1); p.sections.splice(j, 0, loc.s); touch(p); renderCenter(); return; }
+  if (e.target.closest('[data-sec-del]')){
+    const hasText = loc.s.blocks.some(b => b.text.trim());
+    if (hasText && !confirm(`¿Eliminar «${loc.s.title || sectionWord(p.type) + ' ' + (loc.si + 1)}» con todas sus líneas?`)) return;
+    p.sections.splice(loc.si, 1); touch(p); renderCenter(); updateLive(p); return;
+  }
+  const bm = e.target.closest('[data-blk-move]');
+  if (bm && loc.b){ const id = moveBlock(p, loc.si, loc.bi, +bm.dataset.blkMove); if (id){ renderCenter(); updateLive(p); } return; }
+  if (e.target.closest('[data-blk-del]') && loc.b){ loc.s.blocks.splice(loc.bi, 1); touch(p); renderCenter(); updateLive(p); }
+});
+
+let lastFocus = null;
+body.addEventListener('focusin', e => {
+  if (ui.space !== 'planner' || ui.view !== 'script') return;
+  const row = e.target.closest('[data-blk]');
+  if (row && e.target.tagName === 'TEXTAREA') lastFocus = {piece:ui.piece, blk:row.dataset.blk};
+  else if (e.target.id === 'captionInput') lastFocus = {piece:ui.piece, id:'captionInput'};
+});
+body.addEventListener('dblclick', e => {
+  const chip = e.target.closest('.pchip'); if (chip) openPiece(chip.dataset.piece);
+});
+
+/* Arrastrar piezas entre días, con eventos de puntero */
+let drag = null;
+body.addEventListener('pointerdown', e => {
+  const chip = e.target.closest('.pchip');
+  if (!chip || e.button !== 0) return;
+  drag = {id:chip.dataset.piece, chip, x:e.clientX, y:e.clientY, moved:false, ghost:null, target:null};
+});
+window.addEventListener('pointermove', e => {
+  if (!drag) return;
+  if (!drag.moved){
+    if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 5) return;
+    drag.moved = true;
+    drag.ghost = drag.chip.cloneNode(true);
+    drag.ghost.classList.remove('sel'); drag.ghost.classList.add('ghost');
+    document.body.appendChild(drag.ghost);
+    drag.chip.classList.add('dragging');
+    document.body.classList.add('dragging-piece');
+  }
+  drag.ghost.style.transform = `translate(${e.clientX + 10}px,${e.clientY + 10}px)`;
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  const tgt = el ? el.closest('[data-date]') : null;
+  if (tgt !== drag.target){ drag.target?.classList.remove('drop'); drag.target = tgt; tgt?.classList.add('drop'); }
+});
+function endDrag(commit){
+  const d = drag; drag = null;
+  if (!d) return;
+  if (!d.moved){ if (commit) selectChip(d.id); return; }
+  d.ghost.remove(); d.chip.classList.remove('dragging');
+  document.body.classList.remove('dragging-piece');
+  d.target?.classList.remove('drop');
+  if (commit && d.target){
+    const p = data.pieces.find(x => x.id === d.id);
+    const nd = d.target.dataset.date || null;
+    if (p && p.date !== nd){ p.date = nd; touch(p); }
+  }
+  render();
+}
+window.addEventListener('pointerup', () => endDrag(true));
+window.addEventListener('pointercancel', () => endDrag(false));
+
+/* ===== Eventos: panel derecho ===== */
+right.addEventListener('click', e => {
+  if (ui.space === 'textos'){ if (curPrompt()) promptRightClick(e); else noteRightClick(e); return; }
+  if (taskRightClick(e)) return;
+  const ins = e.target.closest('[data-insert]');
+  if (ins){ const n = data.notes.find(x => x.id === ins.dataset.insert); if (n) insertFrase(n, ins); return; }
+  const p = curPiece();
+  const tb = e.target.closest('[data-set-type]'); if (tb && p){ setType(p, tb.dataset.setType); return; }
+  const sb = e.target.closest('[data-set-status]'); if (sb && p){ p.status = sb.dataset.setStatus; touch(p); render(); return; }
+  const dl = e.target.closest('[data-del-link]'); if (dl && p){ p.links = p.links.filter(l => l.id !== dl.dataset.delLink); touch(p); renderRight(); return; }
+  const di = e.target.closest('[data-del-img]');
+  if (di && p){
+    const im = p.images.find(i => i.id === di.dataset.delImg);
+    if (im){ if (im.path) store.pendingDeletes.push(im.path); const c = imgCache.get(im.id); if (c && c.startsWith('blob:')) URL.revokeObjectURL(c); imgCache.delete(im.id); }
+    p.images = p.images.filter(i => i.id !== di.dataset.delImg); touch(p); renderRight(); return;
+  }
+  const th = e.target.closest('.thumb img'); if (th && th.src){ lightbox.querySelector('img').src = th.src; lightbox.hidden = false; $('#lbClose').focus(); return; }
+  if (e.target.closest('#imgDrop')){ imgInput.click(); return; }
+  const id = e.target.closest('button')?.id;
+  if (!id) return;
+  if (id === 'openScript' && p) openPiece(p.id);
+  else if (id === 'exportList') download('guiones.md', listMD(), 'text/markdown');
+  else if (id === 'clearDate' && p){ p.date = null; touch(p); render(); }
+  else if (id === 'exportMd' && p) download(`${slug(p.title)}-guion.md`, guionMD(p), 'text/markdown');
+  else if (id === 'exportTxt' && p) download(`${slug(p.title)}-voz-en-off.txt`, voiceTXT(p), 'text/plain');
+  else if (id === 'deletePiece' && p) deletePiece(p);
+  else if (id === 'exportPlan') download(`plan-${ui.month.getFullYear()}-${pad(ui.month.getMonth() + 1)}.md`, planMD(), 'text/markdown');
+  else if (id === 'deleteBrand'){
+    for (const n of data.notes) if (n.brandId === ui.brand) n.brandId = null;
+    data.brands = data.brands.filter(b => b.id !== ui.brand); ui.brand = 'all'; markDirty(); render();
+  }
+});
+
+right.addEventListener('change', e => {
+  if (taskRightChange(e)) return;
+  if (ui.space === 'textos'){
+    const n = curNote(); if (!n) return;
+    if (e.target.id === 'noteBrand'){ n.brandId = e.target.value || null; touchNote(n); }
+    if (e.target.id === 'noteSource') renderRight();
+    return;
+  }
+  const p = curPiece();
+  if (e.target.id === 'dateInput' && p){
+    p.date = e.target.value || null;
+    if (p.date){ const d = parseKey(p.date); ui.month = new Date(d.getFullYear(), d.getMonth(), 1); }
+    touch(p); render();
+  } else if (e.target.id === 'brandSelect' && p){
+    p.brandId = e.target.value; if (ui.brand !== 'all') ui.brand = p.brandId; ui.collapsed[p.brandId] = false;
+    touch(p); render();
+  }
+});
+
+right.addEventListener('input', e => {
+  if (taskRightInput(e)) return;
+  if (ui.space === 'textos'){
+    const n = curNote(); if (!n) return;
+    if (e.target.id === 'noteTopic'){ n.topic = e.target.value.trim(); touchNote(n); renderTree(); }
+    if (e.target.id === 'noteSource'){ n.source = e.target.value.trim(); touchNote(n); }
+    return;
+  }
+  const p = curPiece();
+  const ln = e.target.closest('[data-link-note]');
+  if (ln && p){ const l = p.links.find(x => x.id === ln.dataset.linkNote); if (l){ l.note = ln.value; touch(p); } return; }
+  const b = data.brands.find(x => x.id === ui.brand);
+  if (b && e.target.id === 'brandName'){ b.name = e.target.value; markDirty(); renderTree(); }
+  if (b && e.target.id === 'brandEmoji'){ b.emoji = e.target.value.trim(); markDirty(); renderTree(); }
+});
+
+right.addEventListener('keydown', e => {
+  if (e.target.id === 'linkInput' && e.key === 'Enter'){
+    e.preventDefault();
+    const p = curPiece(); let u = e.target.value.trim(); if (!p || !u) return;
+    if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
+    try { new URL(u); } catch (err){ toast('Ese enlace no parece válido. Cópialo completo desde la barra del navegador.'); return; }
+    p.links.push({id:uid(), url:u, note:''}); touch(p); renderRight(); $('#linkInput')?.focus();
+  }
+  if (e.target.id === 'imgDrop' && (e.key === 'Enter' || e.key === ' ')){ e.preventDefault(); imgInput.click(); }
+});
+
+imgInput.addEventListener('change', () => { const files = [...imgInput.files]; imgInput.value = ''; if (files.length) addImages(files); });
+
+/* ===== Imágenes ===== */
+function compressImage(file){
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file);
+    const im = new Image();
+    im.onload = () => {
+      try {
+        const max = 1600;
+        const k = Math.min(1, max / Math.max(im.naturalWidth, im.naturalHeight));
+        const w = Math.max(1, Math.round(im.naturalWidth * k)), h = Math.max(1, Math.round(im.naturalHeight * k));
+        const c = document.createElement('canvas'); c.width = w; c.height = h;
+        const ctx = c.getContext('2d'); ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h); ctx.drawImage(im, 0, 0, w, h);
+        URL.revokeObjectURL(url);
+        res({id:uid(), name:file.name.replace(/\.[^.]+$/, '') + '.jpg', w, h, data:c.toDataURL('image/jpeg', .82)});
+      } catch (err){ URL.revokeObjectURL(url); rej(err); }
+    };
+    im.onerror = () => { URL.revokeObjectURL(url); rej(new Error('el navegador no reconoce el formato')); };
+    im.src = url;
+  });
+}
+
+async function addImages(files){
+  const p = curPiece();
+  if (!p){ toast('Abre una pieza para añadirle imágenes.'); return; }
+  let added = 0;
+  for (const f of files){
+    if (!f.type.startsWith('image/')) continue;
+    try { const im = await compressImage(f); p.images.push(im); imgCache.set(im.id, im.data); added++; }
+    catch (err){ console.error(`No se pudo leer ${f.name}:`, err); toast(`No pude leer «${f.name}» (${err.message}). Guárdala como JPG o PNG y vuelve a intentarlo.`); }
+  }
+  if (added){ touch(p); renderRight(); }
+}
+
+async function imgSrc(im){
+  if (imgCache.has(im.id)) return imgCache.get(im.id);
+  if (im.data){ imgCache.set(im.id, im.data); return im.data; }
+  if (im.path && store.mode === 'github' && store.cfg){
+    const r = await gh('/contents/' + encodePath(im.path), {accept:'application/vnd.github.raw'});
+    if (!r.ok) throw await ghError(r, 'traer una imagen');
+    const u = URL.createObjectURL(await r.blob());
+    imgCache.set(im.id, u); return u;
+  }
+  throw new Error('la imagen está guardada en GitHub y esta pestaña no está conectada');
+}
+
+function hydrateImages(root){
+  root.querySelectorAll('img[data-img-id]').forEach(async el => {
+    const id = el.dataset.imgId;
+    let im = null;
+    for (const p of data.pieces){ im = p.images.find(i => i.id === id); if (im) break; }
+    if (!im) return;
+    const th = el.closest('.thumb');
+    try { const src = await imgSrc(im); if (el.isConnected){ el.src = src; th?.classList.remove('loading'); } }
+    catch (err){ console.error(`No se pudo cargar ${im.name}:`, err); if (th){ th.classList.remove('loading'); th.classList.add('failed'); th.title = `No se pudo cargar: ${err.message}`; } }
+  });
+}
+
+lightbox.addEventListener('click', e => { if (e.target === lightbox || e.target.closest('#lbClose')) lightbox.hidden = true; });
+
+/* ===== Archivos arrastrados y pegados ===== */
+const hasFiles = e => [...(e.dataTransfer?.types || [])].includes('Files');
+let dragDepth = 0;
+window.addEventListener('dragenter', e => { if (!hasFiles(e)) return; dragDepth++; if (curPiece()) document.body.classList.add('file-over'); });
+window.addEventListener('dragleave', e => { if (!hasFiles(e)) return; dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) document.body.classList.remove('file-over'); });
+window.addEventListener('dragover', e => { if (hasFiles(e)) e.preventDefault(); });
+window.addEventListener('drop', e => {
+  if (!hasFiles(e)) return;
+  e.preventDefault(); dragDepth = 0; document.body.classList.remove('file-over');
+  const files = [...e.dataTransfer.files];
+  const json = files.find(f => /\.json$/i.test(f.name) || f.type === 'application/json');
+  if (json){ openFileObj(json); return; }
+  const imgs = files.filter(f => f.type.startsWith('image/'));
+  if (imgs.length) addImages(imgs);
+  else toast('Ese archivo no es un guion ni una imagen. Arrastra un .json de guiones, o imágenes JPG, PNG o WebP.');
+});
+document.addEventListener('paste', e => {
+  const files = [...(e.clipboardData?.files || [])].filter(f => f.type.startsWith('image/'));
+  if (files.length && curPiece()){ e.preventDefault(); addImages(files); }
+});
+
+/* ===== Exportar ===== */
+function guionMD(p){
+  const b = brandOf(p), t = typeInfo(p.type), L = [];
+  L.push(`# ${p.title || 'Sin título'}`, '');
+  L.push(`- Marca: ${b.name}`, `- Formato: ${t[1]}`, `- Estado: ${stateLabel(p.status)}`, `- Fecha: ${p.date ? cap(longDate(p.date)) + ' de ' + p.date.slice(0, 4) : 'sin fecha'}`);
+  if (p.type === 'video') L.push(`- Voz en off estimada: ${durOf(totalVoiceWords(p))}`);
+  L.push('');
+  p.sections.forEach((s, i) => {
+    L.push(`## ${i + 1}. ${s.title || sectionWord(p.type) + ' ' + (i + 1)}`, '');
+    s.blocks.forEach(bk => {
+      if (!bk.text.trim()) return;
+      L.push(`**${kindLabel(p.type, bk.kind)}:** ${bk.text.trim().replace(/\n/g, '  \n')}`, '');
+    });
+  });
+  if (p.caption.trim() || p.hashtags.trim()){
+    L.push('## Texto de la publicación', '');
+    if (p.caption.trim()) L.push(p.caption.trim(), '');
+    if (p.hashtags.trim()) L.push(p.hashtags.trim(), '');
+  }
+  if (p.links.length || p.images.length){
+    L.push('## Material', '');
+    p.links.forEach(l => L.push(`- ${l.note ? l.note + ': ' : ''}${l.url}`));
+    p.images.forEach(im => L.push(`- Imagen: ${im.name}`));
+    L.push('');
+  }
+  return L.join('\n');
+}
+
+function voiceTXT(p){
+  const parts = p.sections.map(s => s.blocks.filter(b => b.kind === 'voz' && b.text.trim()).map(b => b.text.trim()).join('\n\n')).filter(Boolean);
+  return [(p.title || 'Sin título').toUpperCase(), '', parts.join('\n\n\n')].join('\n') + '\n';
+}
+
+function planMD(){
+  const y = ui.month.getFullYear(), m = ui.month.getMonth(), prefix = `${y}-${pad(m + 1)}`;
+  const vis = visiblePieces();
+  const b = ui.brand !== 'all' ? data.brands.find(x => x.id === ui.brand) : null;
+  const line = p => `- ${typeInfo(p.type)[1]}: ${p.title || 'Sin título'} (${stateLabel(p.status).toLowerCase()})${b ? '' : ', ' + brandOf(p).name}`;
+  const L = [`# Plan de contenido de ${MONTHS[m]} de ${y}`, '', `Marca: ${b ? b.name : 'todas'}`, ''];
+  let cur = '';
+  for (const p of sortPieces(vis.filter(p => p.date && p.date.startsWith(prefix)))){
+    if (p.date !== cur){ if (cur) L.push(''); cur = p.date; L.push(`## ${cap(longDate(p.date))}`, ''); }
+    L.push(line(p));
+  }
+  const undated = sortPieces(vis.filter(p => !p.date));
+  if (undated.length){ L.push('', '## Sin fecha', ''); undated.forEach(p => L.push(line(p))); }
+  return L.join('\n') + '\n';
+}
+
+function listMD(){
+  const vis = visiblePieces();
+  const b = ui.brand !== 'all' ? data.brands.find(x => x.id === ui.brand) : null;
+  const line = p => `- ${typeInfo(p.type)[1]}: ${p.title || 'Sin título'} (${p.date ? cap(longDate(p.date)) : 'sin fecha'})${b ? '' : ', ' + brandOf(p).name}`;
+  const L = ['# Guiones', '', `Marca: ${b ? b.name : 'todas'}`, ''];
+  const week = vis.filter(isThisWeek).sort((x, y) => x.date.localeCompare(y.date));
+  if (week.length){ L.push('## Para esta semana', ''); week.forEach(p => L.push(line(p))); L.push(''); }
+  for (const [st, label] of [['produccion','Producción'],['guion','Guion'],['idea','Ideas'],['programada','Programada'],['publicada','Publicada']]){
+    const ps = sortList(vis.filter(p => !isThisWeek(p) && p.status === st));
+    if (!ps.length) continue;
+    L.push(`## ${label}`, ''); ps.forEach(p => L.push(line(p))); L.push('');
+  }
+  return L.join('\n');
+}
+
+async function downloadCopy(){
+  const rev = store.rev;
+  try {
+    const pieces = [];
+    for (const p of data.pieces){
+      const images = [];
+      for (const im of p.images) images.push({id:im.id, name:im.name, w:im.w, h:im.h, data:im.data || await toDataURL(await imgSrc(im))});
+      pieces.push({...p, images});
+    }
+    download('guiones-koru.json', JSON.stringify({version:1, brands:data.brands, pieces, prompts:data.prompts, notes:data.notes}, null, 1), 'application/json');
+    if (store.mode === 'local'){ store.savedRev = rev; store.lastSaved = new Date(); renderStorage(); }
+  } catch (err){
+    console.error('No se pudo preparar la copia:', err);
+    toast(`No pude preparar la copia: ${err.message}. Revisa tu conexión y vuelve a intentarlo.`);
+  }
+}
+
+/* ===== GitHub ===== */
+function gh(path, {method = 'GET', body, accept} = {}){
+  const c = store.cfg;
+  const headers = {'Authorization':`Bearer ${c.token}`, 'Accept':accept || 'application/vnd.github+json', 'X-GitHub-Api-Version':'2022-11-28'};
+  if (body) headers['Content-Type'] = 'application/json';
+  return fetch(`https://api.github.com/repos/${encodeURIComponent(c.owner)}/${encodeURIComponent(c.repo)}${path}`, {method, headers, body:body ? JSON.stringify(body) : undefined, cache:'no-store'});
+}
+
+async function ghError(res, action){
+  let detail = '';
+  try { detail = (await res.json()).message || ''; } catch (err){ detail = `respuesta ilegible (${err.message})`; }
+  const base = res.status === 401 ? 'La llave no es válida o expiró. Crea una nueva en GitHub y conéctate otra vez.'
+    : res.status === 403 ? 'La llave no tiene permiso para escribir en ese repositorio. Revisa que tenga «Contents: Read and write».'
+    : res.status === 404 ? 'No encuentro el repositorio, o la llave no tiene acceso a él. Revisa el usuario, el nombre y los permisos de la llave.'
+    : `GitHub respondió con un error al ${action}.`;
+  return new Error(`${base}${detail ? ` (GitHub: ${detail})` : ''}`);
+}
+
+async function loadRemote(){
+  const r = await gh('/contents/' + FILE);
+  if (r.status === 404) return null;
+  if (!r.ok) throw await ghError(r, 'leer tus guiones');
+  const j = await r.json();
+  store.sha = j.sha;
+  let text;
+  if (j.encoding === 'base64' && j.content) text = fromB64(j.content);
+  else {
+    const r2 = await gh('/contents/' + FILE, {accept:'application/vnd.github.raw'});
+    if (!r2.ok) throw await ghError(r2, 'leer tus guiones');
+    text = await r2.text();
+  }
+  try { return JSON.parse(text); }
+  catch (err){ throw new Error(`El archivo ${FILE} de GitHub está dañado (${err.message}). Revisa su historial en GitHub para recuperar una versión anterior.`); }
+}
+
+function serialize(){
+  return JSON.stringify({version:1, brands:data.brands, pieces:data.pieces.map(p => ({...p, images:p.images.map(({data:d, ...rest}) => rest.path ? rest : {...rest, data:d})})), prompts:data.prompts, notes:data.notes}, null, 1);
+}
+
+async function connect(owner, repo, token){
+  store.cfg = {owner, repo, token};
+  const r = await gh('');
+  if (!r.ok) throw await ghError(r, 'conectar');
+  const info = await r.json();
+  if (!info.private) throw new Error('Ese repositorio es público y tus guiones quedarían a la vista de cualquiera. Hazlo privado en GitHub o usa koru-datos.');
+  store.sha = null;
+  const remote = await loadRemote();
+  const hasLocal = data.pieces.length > 0;
+  store.mode = 'github';
+  if (remote && Array.isArray(remote.pieces) && remote.pieces.length && hasLocal){
+    if (confirm('En GitHub ya hay guiones guardados.\n\nAceptar: traer los de GitHub y descartar los de esta pestaña.\nCancelar: subir los de esta pestaña y reemplazar los de GitHub.')){ applyData(remote); store.rev++; store.savedRev = store.rev; }
+    else store.rev++;
+  } else if (remote && !hasLocal){ applyData(remote); store.rev++; store.savedRev = store.rev; }
+  else store.rev++;
+  try { localStorage.setItem(CFG_KEY, JSON.stringify(store.cfg)); }
+  catch (err){ console.warn('No se pudo recordar la conexión:', err); toast('Conectado, pero este navegador no deja recordar la llave. Tendrás que pegarla de nuevo la próxima vez.'); }
+  store.loaded = true; store.state = 'idle'; store.lastSaved = null;
+  ui.connectOpen = false; ui.connectError = '';
+  render();
+  if (isDirty()) saveNow();
+}
+
+function scheduleSave(){ clearTimeout(store.timer); store.timer = setTimeout(saveNow, 1200); }
+
+async function saveNow(){
+  if (store.mode !== 'github'){ downloadCopy(); return; }
+  clearTimeout(store.timer); store.timer = null;
+  if (!store.loaded || store.state === 'conflict' || store.state === 'loading') return;
+  if (store.saving){ store.again = true; return; }
+  if (!isDirty() && !store.pendingDeletes.length) return;
+  store.saving = true; store.state = 'saving'; renderStorage();
+  const rev = store.rev;
+  try {
+    for (const p of data.pieces) for (const im of p.images){
+      if (im.path || !im.data) continue;
+      const path = `${MEDIA}${im.id}.jpg`;
+      const r = await gh('/contents/' + encodePath(path), {method:'PUT', body:{message:`Imagen para «${p.title || 'Sin título'}»`, content:im.data.split(',')[1]}});
+      if (!r.ok && r.status !== 422) throw await ghError(r, 'subir una imagen');
+      im.path = path; imgCache.set(im.id, im.data); delete im.data;
+    }
+    while (store.pendingDeletes.length){
+      const path = store.pendingDeletes[0];
+      const g = await gh('/contents/' + encodePath(path));
+      if (g.ok){
+        const j = await g.json();
+        const d = await gh('/contents/' + encodePath(path), {method:'DELETE', body:{message:'Quita imagen', sha:j.sha}});
+        if (!d.ok && d.status !== 404) console.warn(`No se pudo borrar ${path} en GitHub (estado ${d.status}). Queda en el repositorio sin usarse.`);
+      }
+      store.pendingDeletes.shift();
+    }
+    const payload = {message:'Actualiza guiones', content:toB64(serialize())};
+    if (store.sha) payload.sha = store.sha;
+    const r = await gh('/contents/' + FILE, {method:'PUT', body:payload});
+    if (r.status === 409 || r.status === 422){ store.state = 'conflict'; console.warn('Conflicto al guardar:', r.status, await r.text()); return; }
+    if (!r.ok) throw await ghError(r, 'guardar');
+    const j = await r.json();
+    store.sha = j.content.sha; store.savedRev = rev; store.lastSaved = new Date(); store.state = 'idle';
+  } catch (err){
+    if (err instanceof TypeError){
+      console.warn('Sin conexión al guardar:', err);
+      store.state = 'offline'; clearTimeout(store.retry); store.retry = setTimeout(() => { store.state = 'idle'; saveNow(); }, 15000);
+    } else { console.error('Error al guardar:', err); store.state = 'error'; store.errorMsg = err.message; }
+  } finally {
+    store.saving = false; renderStorage();
+    if (store.again){ store.again = false; if (store.state === 'idle' && isDirty()) saveNow(); }
+    else if (store.state === 'idle' && isDirty()) scheduleSave();
+  }
+}
+
+async function pullRemote(ask){
+  if (ask && isDirty() && !confirm('Traer la versión de GitHub descarta los cambios de esta pestaña que no se guardaron. ¿Continuar?')) return;
+  store.state = 'loading'; renderStorage();
+  try {
+    const remote = await loadRemote();
+    applyData(remote || emptyData());
+    store.rev++; store.savedRev = store.rev; store.loaded = true; store.state = 'idle'; store.lastSaved = new Date();
+    if (!remote){ store.rev++; }
+    render();
+    if (isDirty()) saveNow();
+  } catch (err){
+    console.error('No se pudo traer de GitHub:', err);
+    store.state = 'error';
+    store.errorMsg = err instanceof TypeError ? 'No hay conexión con GitHub. Revisa tu internet y pulsa Reintentar.' : err.message;
+    renderStorage();
+  }
+}
+const startupLoad = () => pullRemote(false);
+
+window.addEventListener('online', () => { if (store.mode === 'github' && store.state === 'offline'){ store.state = 'idle'; saveNow(); } });
+
+/* ===== Teclado y cierre ===== */
+window.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's'){ e.preventDefault(); saveNow(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key === '.'){ e.preventDefault(); toggleFocus(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter'){
+    if (ui.space === 'textos' && curPrompt()){
+      e.preventDefault();
+      if (ui.promptView === 'edit'){ ui.promptView = 'read'; renderCenter(); }
+      else { const b = $('#copyPrompt'); if (b) copyPrompt(b); }
+      return;
+    }
+    const aid = document.activeElement?.id;
+    if (ui.space === 'textos' && (aid === 'bankCapture' || aid === 'capTopic')){ e.preventDefault(); saveCapture(); return; }
+  }
+  if (e.key === 'Escape'){
+    if (!lightbox.hidden){ lightbox.hidden = true; return; }
+    if (ui.space === 'textos' && curPrompt() && ui.promptView === 'read'){ ui.promptView = 'edit'; renderCenter(); return; }
+    if (ui.focus && isEditorView()){ toggleFocus(); return; }
+    const tag = document.activeElement?.tagName;
+    if (ui.view === 'cal' && ui.piece && tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT'){ ui.piece = null; render(); }
+  }
+});
+window.addEventListener('beforeunload', e => { if (isDirty()){ e.preventDefault(); e.returnValue = ''; } });
+
+const todayText = new Date().toLocaleDateString('es', {weekday:'long', day:'numeric', month:'long'});
+$('#today').textContent = todayText.charAt(0).toLocaleUpperCase('es') + todayText.slice(1);
+
+/* ===== Arranque ===== */
+let saved = null;
+try { saved = JSON.parse(localStorage.getItem(CFG_KEY) || 'null'); } catch (err){ console.warn('No se pudo leer la conexión guardada:', err); }
+if (saved && saved.owner && saved.repo && saved.token){
+  store.mode = 'github'; store.cfg = saved; store.state = 'loading';
+  render();
+  startupLoad();
+} else {
+  render();
+}
+})();
+</script>
+
+</template>
+
+<script>
+(() => {
+'use strict';
+const TITLES = {tareas:'Tareas', planner:'Planner', textos:'Textos'};
+const frames = {};
+const win = name => frames[name] ? frames[name].contentWindow : null;
+let pending = false, readyQueue = [];
+
+function mount(name, label){
+  const tpl = document.getElementById('app-' + name);
+  const f = document.createElement('iframe');
+  f.title = label;
+  f.setAttribute('allow', 'clipboard-read; clipboard-write');
+  f.srcdoc = '<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body>'
+    + tpl.innerHTML + '</body></html>';
+  document.body.appendChild(f);
+  frames[name] = f;
+}
+function show(name){ for (const [k, f] of Object.entries(frames)) f.classList.toggle('on', k === name); }
+
+window.KoruHub = {
+  go(space){
+    if (!TITLES[space]) return;
+    const frame = space === 'tareas' ? 'tareas' : 'escritorio';
+    show(frame);
+    if (frame === 'escritorio'){
+      const app = win('escritorio') && win('escritorio').KoruApp;
+      if (app) app.setSpace(space); else readyQueue.push(() => win('escritorio').KoruApp.setSpace(space));
+    }
+    document.title = TITLES[space] + ' | Koru KSVT';
+    try { win(frame).focus(); } catch (err){ console.warn('No se pudo enfocar el espacio:', err); }
+  },
+  tracker(){ const w = win('tareas'); return w && w.KoruTracker ? w.KoruTracker : null; },
+  trackerChanged(){
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(() => {
+      pending = false;
+      const w = win('escritorio');
+      if (w && w.KoruApp) w.KoruApp.trackerChanged();
+    });
+  },
+  openPiece(id){ this.go('planner'); const w = win('escritorio'); if (w && w.KoruApp) w.KoruApp.openPiece(id); },
+  openTasks(clientId, projectId){ this.go('tareas'); const t = this.tracker(); if (t) t.open(clientId, projectId); }
+};
+
+mount('tareas', 'Tareas');
+mount('escritorio', 'Planner y Textos');
+frames.escritorio.addEventListener('load', () => { readyQueue.splice(0).forEach(fn => fn()); });
+KoruHub.go('tareas');
 })();
 </script>
 </body>
